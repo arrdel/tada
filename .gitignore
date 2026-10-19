@@ -1,0 +1,27 @@
+# Private course notes
+task.todo
+todo.md
+
+# LaTeX build files
+*.aux
+*.log
+*.nav
+*.out
+*.snm
+*.toc
+*.vrb
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# Python
+__pycache__/
+*.pyc
+
+# OS / editor
+.DS_Store
+.vscode/
+
+# Copyrighted paper (keep local copies only)
+21-PPAI_*.pdf
+presentation/figures/paper.pdf
