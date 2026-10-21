@@ -68,6 +68,9 @@
 \newcommand{\src}[1]{{\fsA\color{ppMuted}#1}}
 \newcommand{\bul}{\textbullet~}
 \newcommand{\yes}{{\color{ppGreenD}\faCheck}}
+% fixed-size boxes so side-by-side panels get equal heights
+\newcommand{\topbox}[3]{\parbox[t][#2][t]{#1}{\raggedright #3}}
+\newcommand{\midbox}[3]{\parbox[c][#2][c]{#1}{\centering #3}}
 
 \tikzset{
   panel/.style={draw=ppGrey,line width=0.6pt,rounded corners=2.5mm,fill=white,
@@ -180,9 +183,9 @@
   \foreach \t in {t1,t2,t3} \draw[arr] (\t.east) -- (pp.west |- \t.east);
 
   \node[gpanel,text width=3.7cm] (nx) at (11.4,2.8)
-    {\lab{\color{ppGreenD}TASK III \textperiodcentered{} OUR PROJECT}\ttl{Where does it break?}
-     PPAI routes on \emph{reported} load. What if the report is old, everyone reacts to it at once, or a peer lies?\\[1.5mm]
-     \centering{\fsE\color{ppGreenD}\faClock[regular]\quad\faUsers\quad\faUserSecret}};
+    {\lab{\color{ppGreenD}TASK III \textperiodcentered{} OUR PROJECT}\ttl{Whom to trust?}
+     PPAI believes every peer's reported skill and every answer. What if a peer lies, or a group colludes?\\[1.5mm]
+     \centering{\fsE\color{ppGreenD}\faUserSecret\quad\faUsers\quad\faClipboardCheck}};
   \draw[darr] (pp.east |- nx.west) -- (nx.west);
 \end{canvas}
 \takeaway{PPAI = P2P lookup for \emph{expertise} + LLM routing + a load-aware game between users.}
@@ -545,7 +548,7 @@
   \foreach \y/\n/\h/\b in {
     1.5/1/{Personal edge agents are specialists, so they should share.}/{No agent wins everywhere, a few win most often, and the second-best is usually close (Findings 1--3).},
     3.2/2/{PPAI = prototype-anchored scoring + a Bayesian routing game.}/{Queries and agents share a fixed 20-prototype space, so churn is one gossip message. Each user maximises relevance $-\,\beta\times$ cost of delegation, with an equilibrium and a price of anarchy $\le 5/3$ (as claimed).},
-    4.9/3/{It matches the best specialist per benchmark and stays fast under load.}/{Up to +7.96 points vs.\ RouterDC and $-$16.34\% time vs.\ voting on MMLU; flat latency up to 50 queries/s; scales to 1000 peers. Open: stale load, real congestion between users, trust and incentives.}}{
+    4.9/3/{It matches the best specialist per benchmark and stays fast under load.}/{Up to +7.96 points vs.\ RouterDC and $-$16.34\% time vs.\ voting on MMLU; flat latency up to 50 queries/s; scales to 1000 peers. Open: trust between peers (our Task III), stale load, real congestion between users.}}{
     \draw[ppOrange,line width=0.7pt,rounded corners=2.5mm,fill=white] (0.7,\y) rectangle (15.3,\y+1.45);
     \fill[ppOrange] (1.25,\y+0.48) circle (0.26);
     \node[text=white,font=\fsD\bfseries] at (1.25,\y+0.48) {\n};
@@ -557,127 +560,143 @@
 \end{frame}
 
 % =====================================================================
-% 15. TASK III: CANDIDATE PROBLEMS
+% 15. TASK III: PROBLEM
 % =====================================================================
 \begin{frame}
-\frametitle{Task III progress: three candidate problems}
-\framesubtitle{Status: proposal stage. Each is a networking problem with an AI decision-maker, drawn from PPAI's gaps.}
+\frametitle{Task III progress: whom should a peer trust?}
+\framesubtitle{PPAI believes every peer's self-reported skill and every answer. We break that assumption, then fix it.}
 \begin{canvas}
-  \draw[ppOrange,line width=0.9pt,dashed,rounded corners=3mm] (0.55,2.15) rectangle (10.15,7.1);
-  \node[chip,fill=ppOrange,text=white] at (5.35,2.15) {leading option: A + B together};
+  \node[opanel,text width=4.6cm] (gap) at (0.7,1.95)
+    {\lab{\color{ppOrangeD}THE GAP IN PPAI}\ttl{Nothing checks the peers}
+     A query goes to the peer that \emph{claims} the best capability vector, and its answer is accepted as is.
+     PPAI lists trust as future work.};
+  \node[panel,text width=4.6cm] (thr) at ([yshift=-2mm]gap.south west)
+    {\lab{THREAT MODEL}
+     {\fsB
+     \textbf{Skill liars:} claim 0.95 everywhere, answer badly\\[0.5mm]
+     \textbf{Colluders:} all give the \emph{same} wrong answer\\[0.5mm]
+     \textbf{Whitewashers:} re-join under a new identity\\[0.5mm]
+     \textbf{Camouflage:} answer correctly 30\% of the time}};
 
-  \node[opanel,text width=4.3cm,minimum height=4.5cm] (A) at (0.75,2.45)
-    {\lab{\color{ppOrangeD}CANDIDATE A \textperiodcentered{} LOAD BALANCING}
-     \ttl{Herding on stale load reports}
-     If peers act on old load reports, they all pick the same ``free'' agent at once, overload it, then all leave it
-     (Mitzenmacher, \emph{How useful is old information?}).\\[1mm]
-     {\bfseries AI:} a (multi-agent) RL policy that decides delegate vs.\ serve locally.\\[1mm]
-     {\fsB\color{ppMuted}PPAI's rule is a deterministic argmax, so it is exposed to exactly this.}};
-  \node[opanel,text width=4.3cm,minimum height=4.5cm] (B) at (5.55,2.45)
-    {\lab{\color{ppOrangeD}CANDIDATE B \textperiodcentered{} CONTROL-PLANE COST}
-     \ttl{Probe or guess?}
-     Each state request costs a round trip and traffic; skipping it means deciding on a stale belief.
-     How many peers should we probe per query, and which?\\[1mm]
-     {\bfseries AI:} RL or a bandit that sets the probing budget from the age of each peer's information.\\[1mm]
-     {\fsB\color{ppMuted}PPAI polls every candidate on every query and never counts the cost.}};
-  \node[panel,text width=4.3cm,minimum height=4.5cm] (C) at (10.6,2.45)
-    {\lab{CANDIDATE C \textperiodcentered{} SECURITY}
-     \ttl{Trust-aware delegation}
-     Malicious peers return wrong answers or flood queries; free-riders consume without serving.
-     PPAI \S VII lists both as future work.\\[1mm]
-     {\bfseries AI:} Bayesian-bandit reputation plus anomaly detection inside the routing rule.\\[1mm]
-     {\fsB\color{ppMuted}Needs a credible attack model to evaluate; the most open-ended option.}};
+  \node[peer,fill=ppPurpleL,draw=ppPurple,minimum width=1.9cm] (own) at (7.05,3.3)
+    {{\color{ppPurpleD}\faLaptop}\\ query owner};
+  \node[peer,draw=ppGreen,fill=ppGreenL] (h) at (9.85,2.3) {honest peer: \textbf{B} \yes};
+  \node[peer,draw=ppRed,fill=ppRed!8] (c1) at (9.85,3.3) {{\color{ppRed}\faUserSecret}~colluder: \textbf{D}};
+  \node[peer,draw=ppRed,fill=ppRed!8] (c2) at (9.85,4.3) {{\color{ppRed}\faUserSecret}~colluder: \textbf{D}};
+  \foreach \p in {h,c1,c2} \draw[arr] (own.east) -- (\p.west);
+  \node[font=\fsA,text=ppRed] at (8.5,5.1) {a majority vote returns \textbf{D}: wrong};
+
+  \node[opanel,text width=3.4cm,align=center] at (11.45,1.95)
+    {{\fsB PPAI accuracy, 10\% colluders}\\[0.8mm]
+     {\fontsize{14}{16}\selectfont\color{ppRed}\textbf{0.73 $\rightarrow$ 0.04}}\\[2.4mm]
+     {\fsB Dawid--Skene, 30\% colluders}\\[0.8mm]
+     {\fontsize{14}{16}\selectfont\color{ppRed}\textbf{0.87 $\rightarrow$ 0.01}}\\[1.6mm]
+     {\fsA\color{ppMuted}our simulator, PPAI's agent profiles}};
+
+  \node[gpanel,text width=8.75cm] at (6.15,5.6)
+    {\lab{\color{ppGreenD}RESEARCH QUESTION}
+     Among the peers that claim they can answer, \textbf{whom do we trust} and \textbf{how many do we ask}?
+     There is no trusted third party, no pre-trusted peer, and every extra probe costs a round trip.};
 \end{canvas}
-\takeaway{Leading direction: learn \emph{when to delegate and when to probe}, under stale, shared load information.}
+\takeaway{Trust-aware delegation is a networking problem: every verification is a probe that costs latency and GPU time.}
 \end{frame}
 
 % =====================================================================
-% 16. TASK III: DRAFT FORMULATION
+% 16. TASK III: METHOD
 % =====================================================================
 \begin{frame}
-\frametitle{Draft formulation for the leading option}
-\framesubtitle{For discussion between us; details will change once we commit to a problem.}
+\frametitle{Our method: TADA, Trust-Aware Delegation with Audits}
+\framesubtitle{Rank by audited trust, ask more peers only when unsure, and never let agreement outrun the audit record.}
 \begin{canvas}
-  % diagram
-  \node[peer,fill=ppPurpleL,draw=ppPurple,minimum width=2.2cm] (q) at (2.25,2.55) {incoming query $q$\\(task cluster $k$)};
-  \node[panel,text width=2.55cm,font=\fsA,anchor=north] (obs) at (2.25,3.45)
-    {{\fsB\bfseries observation $o_i$}\\[0.4mm] relevance $\tilde f(q)$ (from PPAI)\\ own queue length\\ last load $\hat\rho_j$ \textbf{and its age} $\Delta_j$ for each candidate};
-  \node[draw=ppOrange,fill=ppOrangeL,line width=0.8pt,rounded corners=2mm,align=center,font=\fsC,
-        minimum width=2.1cm,minimum height=1.1cm] (pi) at (5.1,3.4) {\textbf{policy} $\pi_\phi$\\{\fsA DQN $\rightarrow$ MAPPO}};
-  \draw[arr] (q.east) -- (pi.west);
-  \draw[arr] (obs.east) -- (pi.west);
-  \node[peer,minimum width=2.15cm] (a1) at (8.0,2.3) {serve locally};
-  \node[peer,minimum width=2.15cm] (a2) at (8.0,3.4) {delegate to $j\in E_i$};
-  \node[peer,minimum width=2.15cm,draw=ppOrange,line width=0.8pt] (a3) at (8.0,4.5) {probe $m$ peers first};
-  \foreach \a in {a1,a2,a3} \draw[arr] (pi.east) -- (\a.west);
-  \draw[darr,ppOrange] (a3.south) -- (8.0,5.5) -- node[below,font=\fsA,text=ppOrangeD] {fresh load reports (cost: one RTT each)} (2.25,5.5) -- (obs.south);
-  \node[font=\fsA,text=ppMuted,align=center] at (4.9,6.45)
-    {environment: discrete-event simulator with one queue per peer,\\ accuracy profiles from PPAI Table I / Fig.\ 2, Poisson + bursty arrivals, churn};
+  \tikzset{flowstep/.style={draw=ppGrey,fill=white,rounded corners=1.5mm,font=\fsB,align=center,
+                        minimum height=0.95cm,text width=2.25cm,inner sep=1mm}}
+  \node[flowstep] (s1) at (1.95,2.5) {\textbf{1}\; shortlist by PPAI relevance};
+  \node[flowstep,draw=ppPurple,fill=ppPurpleL] (s2) at (4.8,2.5) {\textbf{2}\; rank by audited trust $-\,\beta\cdot$load};
+  \node[flowstep,draw=ppBlue,fill=ppBlueL] (s3) at (7.65,2.5) {\textbf{3}\; ask the top 3 peers};
+  \node[flowstep,draw=ppOrange,fill=ppOrangeL] (s4) at (10.5,2.5) {\textbf{4}\; confident?\\ posterior $\ge\tau$};
+  \node[flowstep,draw=ppGreen,fill=ppGreenL,text width=1.6cm] (s5) at (13.55,2.5) {answer};
+  \draw[arr] (s1)--(s2); \draw[arr] (s2)--(s3); \draw[arr] (s3)--(s4);
+  \draw[arr,ppGreenD] (s4) -- node[above,font=\fsA]{yes} (s5);
+  \draw[arr,ppOrangeD] (s4.south) -- ++(0,0.42) -| node[pos=0.25,below,font=\fsA,text=ppOrangeD]{no: ask 2 more} (s3.south);
 
-  % right: spec
-  \node[opanel,text width=5.5cm] (rw) at (9.6,1.95)
-    {\ttl{Reward per query}
-     \begin{tabular}{@{}c@{}}
-       $r=\text{acc}(j,k)-\beta\,\big(t^{\text{wait}}+t^{\text{infer}}+t^{\text{RTT}}\big)-\gamma\, m$\\[2mm]
-       \parbox{5.4cm}{\raggedright\fsB Accuracy of the chosen agent on the query's cluster, minus latency, minus the cost of $m$ probes.}
-     \end{tabular}};
-  \node[panel,text width=5.5cm] at ([yshift=-2.2mm]rw.south west)
-    {{\fsB
-     \textbf{Baselines:} PPAI's rule (re-implemented), greedy best-relevance, random among top-3, power-of-two-choices, full-information oracle.\\[1mm]
-     \textbf{Metrics:} accuracy, mean and p95 latency, probes per query, Jain's fairness index, behaviour under churn.\\[1mm]
-     \textbf{Hypothesis to test:} with stale information PPAI's argmax herds; a learned, partly randomised policy
-     lowers p95 latency at equal accuracy and with fewer probes.}};
+  \node[ppanel] at (0.7,3.85) {\topbox{4.3cm}{2.75cm}{%
+     \lab{\color{ppPurpleD}AUDIT-CAPPED TRUST}
+     Two Beta reputations per peer and skill: \emph{agreement} (cheap, but a coalition can fake it) and
+     \emph{gold-question audits} (cannot be faked).\\[1.6mm]
+     {\centering $\hat a_{jk}=\min\{\text{agreement},\ \text{audit UCB}\}$\par}}};
+  \node[opanel] at (5.6,3.85) {\topbox{4.3cm}{2.75cm}{%
+     \lab{\color{ppOrangeD}ANCHORED AGREEMENT}
+     Learn from agreement only if the answer still wins when each peer is weighted by its
+     \emph{audit-only} accuracy.\\[1.6mm]
+     Unaudited peers count as chance, so colluders cannot vouch for each other.}};
+  \node[bpanel] at (10.5,3.85) {\topbox{4.3cm}{2.75cm}{%
+     \lab{\color{ppBlue}SPOT AUDITS (15\% OF QUERIES)}
+     A gold question from PPAI's own per-prototype set $Q_k$ goes to a peer we just relied on,
+     or to the peer we know least about.\\[1.6mm]
+     Newcomers and whitewashers are vetted on gold questions, not on user queries.}};
 \end{canvas}
-\takeaway{Same inputs as PPAI's router, plus the age of each load report and the option to pay for a fresh one.}
+\takeaway{Reported skill is only a filter: trust is earned on gold questions and spread by anchored agreement.}
 \end{frame}
 
 % =====================================================================
-% 17. TASK III: PLAN AND STATUS
+% 17. TASK III: RESULTS
 % =====================================================================
 \begin{frame}
-\frametitle{Plan of action and current status}
-\framesubtitle{Milestones follow the course schedule. The division of work is tentative until we fix the problem.}
+\frametitle{Early results: robust to collusion, cheaper under load}
+\framesubtitle{Event-driven simulator: 50 peers with PPAI's five 7--8B agent profiles (Table I), FIFO queues, 5 seeds.}
 \begin{canvas}
-  \draw[ppGrey,line width=1.1pt] (1.0,2.25) -- (15.0,2.25);
-  \foreach \x/\c/\t in {3.07/ppGreen/{Now: Task II talk}, 8.07/ppOrange/{Milestone 2: 3-page progress report}, 13.07/ppGrey/{Milestone 3: $\ge$6-page report + 25-min talk}}{
-    \fill[\c] (\x,2.25) circle (0.14);
-    \node[font=\fsB\bfseries,anchor=south] at (\x,2.02) {\t};
-  }
-  \node[gpanel,dash pattern=on 0pt off 0pt,text width=4.3cm,font=\fsB,minimum height=2.35cm] at (0.7,2.6)
-    {{\fsC\bfseries Done}\\[0.6mm]
-     \yes~Read and analysed PPAI in depth\\[0.3mm]
-     \yes~Found its gaps: results, proof, overhead\\[0.3mm]
-     \yes~Three candidate problems\\[0.3mm]
-     \yes~Draft formulation of the leading one};
-  \node[opanel,text width=4.3cm,font=\fsB,minimum height=2.35cm] at (5.7,2.6)
-    {{\fsC\bfseries Next}\\[0.6mm]
-     \bul Choose the problem (A+B or C)\\[0.3mm]
-     \bul Build the simulator; re-implement PPAI's rule\\[0.3mm]
-     \bul Reproduce herding under stale load reports\\[0.3mm]
-     \bul Literature review; IEEE progress report};
-  \node[panel,text width=4.3cm,font=\fsB,minimum height=2.35cm] at (10.7,2.6)
-    {{\fsC\bfseries Then}\\[0.6mm]
-     \bul Train the RL policy (from our Task I DQN)\\[0.3mm]
-     \bul Compare with baselines; vary $\beta$, $\gamma$, staleness\\[0.3mm]
-     \bul Optional: small vLLM testbed\\[0.3mm]
-     \bul Final report and talk};
-
-  \node[panel,text width=6.85cm,font=\fsB] at (0.7,5.25)
-    {{\fsC\bfseries Division of work (tentative)}\\[0.6mm]
-     \textbf{Adele Chinda:} simulator, RL agent, training\\[0.3mm]
-     \textbf{Trilok Padhi:} baselines, workload traces, evaluation and plots\\[0.3mm]
-     \textbf{Both:} problem choice, literature review, report, slides};
-  \node[ppanel,text width=6.85cm,font=\fsB] at (8.15,5.25)
-    {{\fsC\bfseries Open decisions for us}\\[0.6mm]
-     \bul Single-agent RL first, or multi-agent from the start?\\[0.3mm]
-     \bul Simulation only, or a small real testbed as well?\\[0.3mm]
-     \bul Workload: synthetic Poisson, or real LLM traces (Azure, BurstGPT)?};
+  \node[anchor=north] at (8,1.7) {\includegraphics[width=12.9cm]{figures/task3_summary.pdf}};
+  \node[opanel] at (0.7,6.1) {\midbox{4.3cm}{1.05cm}{%
+     {\fontsize{12.5}{14}\selectfont\color{ppOrangeD}\textbf{0.77} vs 0.64}\\[0.5mm]
+     {\fsB accuracy with 30\% colluders, vs EigenTrust\\(which is given 3 pre-trusted peers)}}};
+  \node[gpanel,dash pattern=on 0pt off 0pt] at (5.6,6.1) {\midbox{4.3cm}{1.05cm}{%
+     {\fontsize{12.5}{14}\selectfont\color{ppGreenD}\textbf{$-$17\%} probes}\\[0.5mm]
+     {\fsB and the lowest p95 at 200 queries/s\\(672 vs 804--1062 ms)}}};
+  \node[panel] at (10.5,6.1) {\midbox{4.3cm}{1.05cm}{%
+     {\fontsize{12.5}{14}\selectfont\textbf{The price}}\\[0.5mm]
+     {\fsB no attack: 6 pts below a 5-peer vote\\sequential rounds: $\approx$+100 ms p95}}};
 \end{canvas}
-\takeaway{Next two weeks: choose the problem, build the simulator, reproduce PPAI's routing rule.}
+\takeaway{Ablation: without audits, accuracy under collusion falls to 0.42; without anchoring, to 0.63.}
 \end{frame}
 
 % =====================================================================
-% 18. REFERENCES
+% 18. TASK III: STATUS AND NEXT STEPS
+% =====================================================================
+\begin{frame}
+\frametitle{Challenges, a first RL controller, and next steps}
+\framesubtitle{Done: simulator, four baselines, TADA and a Q-learning controller, with tests. Code: github.com/arrdel/ppai.}
+\begin{canvas}
+  \node[panel] at (0.7,1.95) {\topbox{4.45cm}{4.5cm}{%
+     \lab{CHALLENGES, AND HOW WE FIXED THEM}
+     {\fsB
+     \bul Wrong answers never agreed, so voting looked perfect $\rightarrow$ multiple choice with a shared distractor\\[1.2mm]
+     \bul Agreement-only trust was captured by colluders (0.003) $\rightarrow$ audit cap and anchoring (+14 pts)\\[1.2mm]
+     \bul The queue model left servers idle (spurious 12 s) $\rightarrow$ discrete-event simulator\\[1.2mm]
+     \bul Up to 3 sequential rounds $\rightarrow$ ask 3 first ($-$25\% p95)}}};
+  \node[opanel] at (5.6,1.95) {\topbox{4.45cm}{4.5cm}{%
+     \lab{\color{ppOrangeD}PRELIMINARY RL (Q-LEARNING)}
+     {\fsB
+     Learns \emph{stop} vs.\ \emph{ask 2 more}.
+     State: confidence, round, load, skill. Reward: correct $-$ probe cost $-$ latency cost.
+     Trained in simulation.\\[1.6mm]
+     At 150 queries/s with 30\% colluders:\\[0.6mm]
+     p95 latency \textbf{576 $\rightarrow$ 310 ms}\\[0.3mm]
+     probes per query \textbf{4.3 $\rightarrow$ 3.3}\\[0.3mm]
+     accuracy $-$1.4 pts\\[1.6mm]
+     {\color{ppMuted}Not yet better than the threshold rule at the high-accuracy end.}}}};
+  \node[gpanel,dash pattern=on 0pt off 0pt] at (10.5,1.95) {\topbox{4.45cm}{4.5cm}{%
+     \lab{\color{ppGreenD}NEXT, TOWARD THE FINAL REPORT}
+     {\fsB
+     \bul \textbf{Trilok:} real answers from the 5 models (vLLM); Azure and BurstGPT arrival traces\\[1.2mm]
+     \bul \textbf{Adele:} better RL with per-round credit, an audit bandit and an adaptive audit rate\\[1.2mm]
+     \bul \textbf{Trilok:} stronger attacks, such as spotting gold questions and Sybil swarms\\[1.2mm]
+     \bul \textbf{Both:} IEEE final report ($\ge$6 pages) and the 25-min talk}}};
+\end{canvas}
+\takeaway{Every number in these slides is regenerated by one script in the repository (task3/).}
+\end{frame}
+
+% =====================================================================
+% 19. REFERENCES
 % =====================================================================
 \begin{frame}
 \frametitle{References}
@@ -699,18 +718,18 @@
 \raggedright
 \bul T.~Roughgarden, \'E.~Tardos. \textbf{How bad is selfish routing?} Journal of the ACM, 2002.\\[1.1mm]
 \bul J.~Li et al. \textbf{More agents is all you need.} TMLR 2024.\\[1.1mm]
-\bul M.~Mitzenmacher. \textbf{How useful is old information?} IEEE TPDS, 2000.\\[1.1mm]
-\bul M.~Mitzenmacher. \textbf{The power of two choices in randomized load balancing.} IEEE TPDS, 2001.\\[1.1mm]
-\bul S.~Kaul, R.~Yates, M.~Gruteser. \textbf{Real-time status: How often should one update?} IEEE INFOCOM 2012.\\[1.1mm]
+\bul A.~P.~Dawid, A.~M.~Skene. \textbf{Maximum likelihood estimation of observer error-rates using the EM algorithm.} J.~Royal Stat.~Soc.~C, 1979.\\[1.1mm]
+\bul A.~J{\o}sang, R.~Ismail. \textbf{The Beta reputation system.} Bled eCommerce Conference, 2002.\\[1.1mm]
+\bul D.~Oleson et al. \textbf{Programmatic gold: Targeted and scalable quality assurance in crowdsourcing.} HCOMP, 2011.\\[1.1mm]
 \bul S.~Kamvar, M.~Schlosser, H.~Garcia-Molina. \textbf{The EigenTrust algorithm for reputation management in P2P networks.} WWW 2003.\\[1.1mm]
-\bul V.~Mnih et al. \textbf{Human-level control through deep reinforcement learning.} Nature, 2015.\\[1.1mm]
-\bul C.~Yu et al. \textbf{The surprising effectiveness of PPO in cooperative multi-agent games.} NeurIPS 2022 (Datasets \& Benchmarks).
+\bul E.~Friedman, P.~Resnick. \textbf{The social cost of cheap pseudonyms.} J.~Econ.~\& Mgmt.~Strategy, 2001.\\[1.1mm]
+\bul C.~Watkins, P.~Dayan. \textbf{Q-learning.} Machine Learning, 1992.
 \end{column}
 \end{columns}
 \end{frame}
 
 % =====================================================================
-% 19. BACKUP: TABLE I
+% 20. BACKUP: TABLE I
 % =====================================================================
 \begin{frame}
 \frametitle{Backup: Table I as printed in the paper}

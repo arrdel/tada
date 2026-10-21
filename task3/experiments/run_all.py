@@ -282,57 +282,63 @@ def figures(rob, cost, load):
     fig.tight_layout(w_pad=0.8)
     save_fig(fig, "cost_load_learning")
 
-    # Compact 4-panel summary used in the 3-page progress report.
-    fig, axes = plt.subplots(1, 4, figsize=(5.5, 1.62))
-    for ax, adv, title in zip(axes[:2], ["skill_liar", "collude"],
-                              ["(a) Skill liars", "(b) Colluders"]):
-        for key, lab, col, _ in METHODS:
-            y = [rob[adv]["%s|%s|%.1f" % (adv, key, f)]["accuracy"] for f in FRACS]
-            ax.plot([100 * f for f in FRACS], y, marker="o", ms=2.2,
-                    lw=1.5 if key == "tada" else 1.0, color=col, label=lab,
-                    zorder=3 if key == "tada" else 2)
-        ax.set_title(title, pad=3)
-        ax.set_xlabel("Adversarial peers (%)", labelpad=1)
-        ax.set_ylim(0, 1)
-        ax.set_xticks([0, 25, 50])
-    axes[0].set_ylabel("Accuracy", labelpad=1)
-    axes[1].set_yticklabels([])
-    ax = axes[2]
-    for key, (col, _, ms) in style.items():
-        pts = [cost["%s|%d" % (key, m)] for m in ms]
+    # Compact 4-panel summary: serif for the report, sans for the slides.
+    def summary(name):
+        fig, axes = plt.subplots(1, 4, figsize=(5.5, 1.62))
+        for ax, adv, title in zip(axes[:2], ["skill_liar", "collude"],
+                                  ["(a) Skill liars", "(b) Colluders"]):
+            for key, lab, col, _ in METHODS:
+                y = [rob[adv]["%s|%s|%.1f" % (adv, key, f)]["accuracy"] for f in FRACS]
+                ax.plot([100 * f for f in FRACS], y, marker="o", ms=2.2,
+                        lw=1.5 if key == "tada" else 1.0, color=col, label=lab,
+                        zorder=3 if key == "tada" else 2)
+            ax.set_title(title, pad=3)
+            ax.set_xlabel("Adversarial peers (%)", labelpad=1)
+            ax.set_ylim(0, 1)
+            ax.set_xticks([0, 25, 50])
+        axes[0].set_ylabel("Accuracy", labelpad=1)
+        axes[1].set_yticklabels([])
+        ax = axes[2]
+        for key, (col, _, ms) in style.items():
+            pts = [cost["%s|%d" % (key, m)] for m in ms]
+            ax.plot([p["probes_per_query"] for p in pts], [p["accuracy"] for p in pts],
+                    marker="s", ms=2.2, lw=1.0, color=col)
+        pts = [cost["tada|%.2f" % t] for t in taus]
         ax.plot([p["probes_per_query"] for p in pts], [p["accuracy"] for p in pts],
-                marker="s", ms=2.2, lw=1.0, color=col)
-    pts = [cost["tada|%.2f" % t] for t in taus]
-    ax.plot([p["probes_per_query"] for p in pts], [p["accuracy"] for p in pts],
-            marker="o", ms=2.4, lw=1.5, color="#E69138")
-    ax.set_title("(c) Cost, 30% colluders", pad=3)
-    ax.set_xlabel("Probes per query", labelpad=1)
-    ax.set_ylim(0, 1)
-    ax.set_yticklabels([])
-    ax = axes[3]
-    for key, lab, col, _ in METHODS:
-        if key == "ppai":
-            continue
-        ax.plot(lams, [load["%s|%d" % (key, l)]["latency_p95_ms"] for l in lams],
-                marker="o", ms=2.2, lw=1.5 if key == "tada" else 1.0, color=col)
-    ax.set_yscale("log")
-    ax.set_yticks([300, 500, 1000])
-    ax.yaxis.set_major_formatter(matplotlib.ticker.ScalarFormatter())
-    ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
-    ax.set_title("(d) Load, 20% colluders", pad=3)
-    ax.set_xlabel("Queries/s", labelpad=1)
-    ax.set_ylabel("p95 latency (ms)", labelpad=1)
-    for ax in axes:
-        ax.grid(axis="y", color="#E6E6E6", lw=0.5)
-        ax.tick_params(labelsize=6.5, pad=1.5)
-        ax.title.set_fontsize(7.4)
-        ax.xaxis.label.set_fontsize(7)
-        ax.yaxis.label.set_fontsize(7)
-    handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", ncol=5, fontsize=6.8,
-               bbox_to_anchor=(0.5, 1.08), handlelength=1.5, columnspacing=1.2)
-    fig.tight_layout(w_pad=0.5)
-    save_fig(fig, "summary")
+                marker="o", ms=2.4, lw=1.5, color="#E69138")
+        ax.set_title("(c) Cost, 30% colluders", pad=3)
+        ax.set_xlabel("Probes per query", labelpad=1)
+        ax.set_ylim(0, 1)
+        ax.set_yticklabels([])
+        ax = axes[3]
+        for key, lab, col, _ in METHODS:
+            if key == "ppai":
+                continue
+            ax.plot(lams, [load["%s|%d" % (key, l)]["latency_p95_ms"] for l in lams],
+                    marker="o", ms=2.2, lw=1.5 if key == "tada" else 1.0, color=col)
+        ax.set_yscale("log")
+        ax.set_yticks([300, 500, 1000])
+        ax.yaxis.set_major_formatter(matplotlib.ticker.ScalarFormatter())
+        ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+        ax.set_title("(d) Load, 20% colluders", pad=3)
+        ax.set_xlabel("Queries/s", labelpad=1)
+        ax.set_ylabel("p95 latency (ms)", labelpad=1)
+        for ax in axes:
+            ax.grid(axis="y", color="#E6E6E6", lw=0.5)
+            ax.tick_params(labelsize=6.5, pad=1.5)
+            ax.title.set_fontsize(7.4)
+            ax.xaxis.label.set_fontsize(7)
+            ax.yaxis.label.set_fontsize(7)
+        handles, labels = axes[0].get_legend_handles_labels()
+        fig.legend(handles, labels, loc="upper center", ncol=5, fontsize=6.8,
+                   bbox_to_anchor=(0.5, 1.08), handlelength=1.5, columnspacing=1.2)
+        fig.tight_layout(w_pad=0.5)
+        save_fig(fig, name)
+
+    summary("summary")
+    with plt.rc_context({"font.family": "sans-serif",
+                         "font.sans-serif": ["Liberation Sans", "Arial", "DejaVu Sans"]}):
+        summary("summary_sans")
 
 
 def main():
