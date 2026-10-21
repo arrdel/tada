@@ -18,9 +18,6 @@ todo.md
 __pycache__/
 *.pyc
 
-# Task III generated outputs (keep the committed motivation figure)
-task3/results/*
-!task3/results/reproduce_accuracy.png
 
 # OS / editor
 .DS_Store

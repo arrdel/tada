@@ -1,25 +1,23 @@
-"""Discrete-event-ish simulator of a decentralized LLM-agent network.
+"""Simulator of a decentralized LLM-agent network with untrusted peers.
 
-Queries arrive as a Poisson process. For each query the owner's policy picks a
-committee of peers; every committee member queues at its own single server
-(FIFO, M/M/1 per peer), produces an answer label, and the answers are
-aggregated by trust-weighted plurality. We record correctness, end-to-end
-latency, and the number of peers probed.
+Queries arrive as a Poisson process. A query's owner runs a delegation policy,
+which dispatches copies of the query to peers. Each peer is a FIFO single
+server (M/M/1); remote peers add a network delay each way. Answers are
+multiple-choice labels produced by the peer's behaviour model.
 
-Simplifications (documented for the write-up / TODO):
-  * Jobs are processed in query-arrival order using a per-peer `next_free`
-    virtual clock, which gives exact single-server FIFO queueing without an
-    explicit event heap.
-  * Trust is updated immediately after each query; strict event ordering
-    (trust only from queries that have *completed*) is left as a refinement.
-  * Correct answers are assumed to agree; independent wrong answers disagree.
+Simplifications, stated in the report:
+  * Queries are handled in arrival order and each peer keeps a `next_free`
+    clock, which gives exact FIFO queueing without an event heap.
+  * Trust learned from a query is available to the next query immediately,
+    even though the answers would arrive tens of milliseconds later.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import numpy as np
 
 from . import peers as peers_mod
-from . import profiles, routing, trust as trust_mod
+from . import profiles
 from .metrics import Metrics
+from .policies import make_policy
 
 
 @dataclass
@@ -27,69 +25,102 @@ class Config:
     n_peers: int = 50
     adversary_fraction: float = 0.2
     adversary_type: str = peers_mod.SKILL_LIAR
-    policy: str = "trust"
-    committee_size: int = 3
-    beta: float = 5.0            # load-aversion weight (spreads queries across peers)
-    arrival_rate: float = 50.0   # aggregate queries/sec
-    n_queries: int = 4000
-    rtt: float = 0.005           # one-way network cost per remote peer, s
-    cluster_probs: tuple = None  # defaults to uniform over clusters
+    camouflage: float = 0.0       # colluders answer correctly w.p. camouflage
+    policy: str = "tada"
+    committee_size: int = 5       # fixed-committee baselines
+    beta: float = 5.0             # load aversion (per second of backlog)
+    arrival_rate: float = 50.0    # aggregate queries/sec
+    n_queries: int = 5000
+    rtt: float = 0.005            # one-way network delay to a remote peer, s
+    # TADA knobs
+    tau: float = 0.9              # stop asking once answer confidence >= tau
+    m_max: int = 5                # most peers asked for one query
+    round_size: int = 2           # peers added per escalation round
+    p_audit: float = 0.1          # gold-question audits per user query
+    w_audit: float = 3.0          # evidence weight of one audit
+    conf_min: float = 0.8         # learn from agreement only above this confidence
+    theta_s: float = 0.3          # PPAI shortlist threshold on reported relevance
+    # identity dynamics
+    whitewash: bool = False       # adversaries re-join when their reputation drops
+    whitewash_threshold: float = 0.4
+    churn_rate: float = 0.0       # identity resets per second, any peer
     seed: int = 0
 
 
+@dataclass
+class Query:
+    qid: int
+    t: float
+    owner: int
+    k: int
+
+
+class Sim:
+    def __init__(self, cfg: Config):
+        self.cfg = cfg
+        self.rng = np.random.default_rng(cfg.seed)
+        self.fleet = peers_mod.build_fleet(
+            cfg.n_peers, cfg.adversary_fraction, cfg.adversary_type, self.rng,
+            camouflage=cfg.camouflage)
+        self.next_free = np.zeros(cfg.n_peers)
+        self.policy = make_policy(cfg, self.fleet)
+        self._canary_qid = 0
+
+    def load(self, t):
+        """Seconds of queued work at every peer (what PPAI polls)."""
+        return np.maximum(0.0, self.next_free - t)
+
+    def canary_qid(self):
+        self._canary_qid -= 1
+        return self._canary_qid
+
+    def dispatch(self, pid, q, t_send, qid=None):
+        """Send query `q` to peer `pid` at time `t_send`.
+        Returns (answer, time the answer is back at the owner)."""
+        net = 0.0 if pid == q.owner else self.cfg.rtt
+        start = max(t_send + net, self.next_free[pid])
+        finish = start + self.rng.exponential(1.0 / self.fleet.mu[pid])
+        self.next_free[pid] = finish
+        answer = self.fleet.answer(pid, q.k, q.qid if qid is None else qid)
+        return answer, finish + net
+
+    def run(self) -> dict:
+        cfg, rng, fleet = self.cfg, self.rng, self.fleet
+        provider = self.policy.provider
+        adv_ids = np.flatnonzero(fleet.adversary)
+        metrics = Metrics()
+        whitewashes = 0
+        next_churn = (rng.exponential(1.0 / cfg.churn_rate)
+                      if cfg.churn_rate > 0 else np.inf)
+        t = 0.0
+        for i in range(cfg.n_queries):
+            t += rng.exponential(1.0 / cfg.arrival_rate)
+            while t >= next_churn:
+                provider.reset(int(rng.integers(cfg.n_peers)))
+                next_churn += rng.exponential(1.0 / cfg.churn_rate)
+
+            q = Query(i, t, int(rng.integers(cfg.n_peers)),
+                      int(rng.integers(profiles.N_CLUSTERS)))
+            out = self.policy.handle(q, self)
+            exposure = (float(np.mean(fleet.adversary[out.answerers]))
+                        if out.answerers else 0.0)
+            metrics.record(out.answer == peers_mod.CORRECT, out.latency,
+                           out.probes, out.audits, exposure)
+
+            if cfg.whitewash and i % 25 == 0:
+                for pid in adv_ids:
+                    if (provider.evidence(pid) >= 5
+                            and provider.reputation(pid) < cfg.whitewash_threshold):
+                        provider.reset(int(pid))
+                        whitewashes += 1
+
+        out = metrics.summary()
+        out["oracle_single"] = fleet.oracle_single()
+        out["whitewashes"] = whitewashes
+        out["policy_name"] = self.policy.name
+        out["config"] = dict(cfg.__dict__)
+        return out
+
+
 def run(cfg: Config) -> dict:
-    rng = np.random.default_rng(cfg.seed)
-    fleet = peers_mod.build_fleet(cfg.n_peers, cfg.adversary_fraction,
-                                  cfg.adversary_type, rng)
-    K = profiles.N_CLUSTERS
-    cluster_probs = (np.full(K, 1.0 / K) if cfg.cluster_probs is None
-                     else np.array(cfg.cluster_probs))
-
-    policy = routing.POLICIES[cfg.policy](m=cfg.committee_size, beta=cfg.beta)
-    trust = (trust_mod.BetaTrust(cfg.n_peers, K) if policy.uses_trust
-             else trust_mod.NoTrust(cfg.n_peers, K))
-
-    next_free = np.zeros(cfg.n_peers)
-    metrics = Metrics()
-    t = 0.0
-
-    for _ in range(cfg.n_queries):
-        t += rng.exponential(1.0 / cfg.arrival_rate)
-        owner = int(rng.integers(cfg.n_peers))
-        k = int(rng.choice(K, p=cluster_probs))
-
-        ctx = {"fleet": fleet, "next_free": next_free, "t": t,
-               "trust": trust, "rng": rng}
-        committee = policy.select(k, ctx)
-
-        # Run each committee member through its own queue.
-        labels, latencies = [], []
-        for pid in committee:
-            start = max(t, next_free[pid])
-            service = rng.exponential(1.0 / fleet.mu[pid])
-            finish = start + service
-            next_free[pid] = finish
-            net = 0.0 if pid == owner else cfg.rtt
-            latencies.append((finish - t) + net)
-            labels.append(fleet.answer(pid, k))
-
-        # Trust-weighted plurality.
-        weights = ([trust.mean(pid, k) for pid in committee]
-                   if policy.uses_trust else [1.0] * len(committee))
-        tally = {}
-        for lab, w in zip(labels, weights):
-            tally[lab] = tally.get(lab, 0.0) + w
-        consensus = max(tally, key=tally.get)
-
-        correct = (consensus == peers_mod.CORRECT_LABEL)
-        latency = max(latencies)
-        metrics.record(correct, latency, len(committee))
-
-        # Learn: reward peers that agreed with the consensus.
-        if policy.uses_trust:
-            for pid, lab in zip(committee, labels):
-                trust.update(pid, k, agreed=(lab == consensus))
-
-    out = metrics.summary()
-    out["config"] = cfg.__dict__.copy()
-    return out
+    return Sim(cfg).run()
