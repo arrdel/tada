@@ -27,8 +27,7 @@ __pycache__/
 
 # Copyrighted paper (keep local copies only)
 21-PPAI_*.pdf
-presentation/figures/paper.pdf
 
-# Report build duplicates and submission bundle
-report/progress_report.pdf
-report/*Supplemental Code.zip
+# Deck and progress report stay local (not on the remote)
+presentation/
+report/
