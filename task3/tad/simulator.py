@@ -36,9 +36,9 @@ class Config:
     tau: float = 0.9              # stop asking once answer confidence >= tau
     m_max: int = 5                # most peers asked for one query
     round_size: int = 2           # peers added per escalation round
-    p_audit: float = 0.1          # gold-question audits per user query
-    w_audit: float = 3.0          # evidence weight of one audit
-    conf_min: float = 0.8         # learn from agreement only above this confidence
+    p_audit: float = 0.15         # gold-question audits per user query
+    conf_min: float = 0.5         # learn from agreement only if the audit-anchored
+                                  # answer matches and is at least this confident
     theta_s: float = 0.3          # PPAI shortlist threshold on reported relevance
     # identity dynamics
     whitewash: bool = False       # adversaries re-join when their reputation drops

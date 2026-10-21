@@ -13,4 +13,12 @@ def make_policy(cfg, fleet):
     if name == "beta":
         return routing.Committee(cfg, trust.BetaAgreement(n, K),
                                  "Agreement trust (m=%d)" % m)
+    if name == "dawid_skene":
+        return routing.Committee(cfg, trust.DawidSkene(n, K, m),
+                                 "Dawid-Skene (m=%d)" % m)
+    if name == "eigentrust":
+        return routing.Committee(cfg, trust.EigenTrust(n, K, fleet.pretrusted),
+                                 "EigenTrust (m=%d)" % m)
+    if name == "tada":
+        return routing.TADA(cfg, trust.AuditedBeta(n, K))
     raise ValueError("unknown policy %r" % name)
