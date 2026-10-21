@@ -102,6 +102,42 @@ def exp_load(seeds, pool):
     return out
 
 
+RL_REWARDS = [  # (tag, probe_cost, latency_cost)
+    ("rl|acc", 0.005, 0.0),
+    ("rl|balanced", 0.03, 0.5),
+    ("rl|fast", 0.06, 0.5),
+]
+
+
+def _train_rl(args):
+    _, probe_cost, latency_cost = args
+    base = dict(adversary_type="collude", adversary_fraction=0.3, m_max=7,
+                policy="tada", escalation="rl", rl_train=True,
+                probe_cost=probe_cost, latency_cost=latency_cost, n_queries=6000)
+    Q = None
+    for ep in range(8):
+        for lam in [50, 150]:
+            Q = run(Config(arrival_rate=lam, rl_q=Q, seed=100 + 10 * ep + lam, **base))["rl_q"]
+    return Q
+
+
+def exp_rl(seeds, pool):
+    """Learned (Q-learning) vs fixed-threshold escalation, trained in simulation
+    on seeds disjoint from the evaluation seeds."""
+    Qs = dict(zip([t for t, _, _ in RL_REWARDS], pool.map(_train_rl, RL_REWARDS)))
+    base = dict(adversary_type="collude", adversary_fraction=0.3, m_max=7, policy="tada")
+    pts = []
+    for lam in [50, 150]:
+        for tau in [0.7, 0.8, 0.9, 0.95]:
+            pts.append(("tau=%.2f|%d" % (tau, lam), dict(base, tau=tau, arrival_rate=lam)))
+        for tag, Q in Qs.items():
+            pts.append(("%s|%d" % (tag, lam),
+                        dict(base, escalation="rl", rl_q=Q, arrival_rate=lam)))
+    out = sweep(pts, seeds, pool)
+    save("rl", out)
+    return out
+
+
 ABLATION_ROWS = [
     ("TADA (full)", dict(policy="tada")),
     ("  - anchoring", dict(policy="tada", anchor=False)),
@@ -252,13 +288,21 @@ def main():
     ap.add_argument("--procs", type=int, default=min(32, os.cpu_count() or 1))
     ap.add_argument("--figures-only", action="store_true",
                     help="redraw figures from the saved JSON results")
+    ap.add_argument("--only", choices=["rl"], help="run a single experiment")
     args = ap.parse_args()
     os.makedirs(FIG, exist_ok=True)
+    seeds = list(range(args.seeds))
+    if args.only == "rl":
+        with Pool(args.procs) as pool:
+            out = exp_rl(seeds, pool)
+        for tag, v in out.items():
+            print("%-16s acc=%.3f probes=%.2f p95=%.0f" % (
+                tag, v["accuracy"], v["probes_per_query"], v["latency_p95_ms"]))
+        return
     if args.figures_only:
         load_json = lambda n: json.load(open(os.path.join(OUT, n + ".json")))
         figures(load_json("robustness"), load_json("cost"), load_json("load"))
         return
-    seeds = list(range(args.seeds))
     with Pool(args.procs) as pool:
         rob = exp_robustness(seeds, pool)
         print("robustness done")
@@ -268,6 +312,8 @@ def main():
         print("load done")
         exp_ablation(seeds, pool)
         print("ablation done")
+        exp_rl(seeds, pool)
+        print("rl done")
     figures(rob, cost, load)
     print(open(os.path.join(OUT, "ablation_table.md")).read())
 

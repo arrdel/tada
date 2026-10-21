@@ -30,6 +30,9 @@ class Policy:
     def process(self, q, sim):
         raise NotImplementedError
 
+    def on_finish(self, out, correct, latency):
+        pass
+
 
 class PPAIArgmax(Policy):
     """PPAI's rule: one peer, max reported relevance minus beta * load.
@@ -85,6 +88,44 @@ class TADA(Policy):
     """
     name = "TADA (ours)"
 
+    # Learned escalation: state = (confidence bin, round, load bin, cluster),
+    # actions = {0: stop, 1: ask round_size more peers}.
+    CONF_BINS = np.array([0.5, 0.7, 0.8, 0.9, 0.95])
+    LOAD_BINS = np.array([0.05, 0.15])
+    MAX_ROUNDS = 3
+
+    def __init__(self, cfg, provider):
+        super().__init__(cfg, provider)
+        self.Q = None
+        if cfg.escalation == "rl":
+            shape = (len(self.CONF_BINS) + 1, self.MAX_ROUNDS,
+                     len(self.LOAD_BINS) + 1, provider.K, 2)
+            self.Q = (np.array(cfg.rl_q, dtype=float).copy() if cfg.rl_q is not None
+                      else np.zeros(shape))
+
+    def _state(self, conf, rnd, load, k):
+        return (int(np.searchsorted(self.CONF_BINS, conf)), min(rnd, self.MAX_ROUNDS - 1),
+                int(np.searchsorted(self.LOAD_BINS, load)), k)
+
+    def _escalate(self, conf, rnd, load, k, sim, traj):
+        if self.Q is None:
+            return conf < self.cfg.tau
+        s = self._state(conf, rnd, load, k)
+        if self.cfg.rl_train and sim.rng.random() < self.cfg.rl_epsilon:
+            a = int(sim.rng.integers(2))
+        else:
+            a = int(np.argmax(self.Q[s]))
+        traj.append((s, a))
+        return a == 1
+
+    def on_finish(self, out, correct, latency):
+        if self.Q is None or not self.cfg.rl_train:
+            return
+        g = (float(correct) - self.cfg.probe_cost * out.probes
+             - self.cfg.latency_cost * latency)
+        for s, a in out.traj:
+            self.Q[s + (a,)] += self.cfg.rl_lr * (g - self.Q[s + (a,)])
+
     def process(self, q, sim):
         cfg, prov, k = self.cfg, self.provider, q.k
         rel = sim.fleet.rep_cap[:, k]
@@ -94,7 +135,8 @@ class TADA(Policy):
         score = prov.acc_vec(k)[shortlist] - cfg.beta * sim.load()[shortlist]
         order = shortlist[np.argsort(-score)]
 
-        used, labels, pos = [], [], 0
+        used, labels, pos, rnd, traj = [], [], 0, 0, []
+        load_now = float(np.mean(sim.load()[order[:cfg.first_round]]))
         while True:
             if not cfg.sequential:
                 size = cfg.m_max
@@ -105,8 +147,11 @@ class TADA(Policy):
             labels += (yield batch)
             used += batch
             answer, conf = prov.aggregate(k, used, labels, sim.rng)
-            if conf >= cfg.tau or len(used) >= cfg.m_max or pos >= len(order):
+            if len(used) >= cfg.m_max or pos >= len(order):
                 break
+            if not self._escalate(conf, rnd, load_now, k, sim, traj):
+                break
+            rnd += 1
 
         if len(used) >= 2:
             if cfg.anchor:
@@ -129,4 +174,6 @@ class TADA(Policy):
                      lambda lab, t=target: prov.audit(t, k, lab == CORRECT))
             audits = 1
 
-        return Outcome(answer, len(used) + audits, audits, used)
+        out = Outcome(answer, len(used) + audits, audits, used)
+        out.traj = traj
+        return out

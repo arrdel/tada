@@ -42,6 +42,14 @@ class Config:
                                   # answer matches and is at least this confident
     theta_s: float = 0.3          # PPAI shortlist threshold on reported relevance
     delta: float = 0.15           # slack on the pooled audit cap
+    # learned escalation (Q-learning); None = fixed threshold tau
+    escalation: str = "threshold"  # "threshold" | "rl"
+    rl_q: object = None           # trained Q-table (numpy array) to deploy
+    rl_train: bool = False        # explore + learn from ground truth (simulation only)
+    rl_epsilon: float = 0.1
+    rl_lr: float = 0.05
+    probe_cost: float = 0.03      # reward penalty per probe
+    latency_cost: float = 0.5     # reward penalty per second of latency
     # ablation switches
     anchor: bool = True           # anchored agreement learning
     pool_cap: bool = True         # cap trust by pooled (all-cluster) audits
@@ -146,8 +154,9 @@ class Sim:
         fleet = self.fleet
         exposure = (float(np.mean(fleet.adversary[out.answerers]))
                     if out.answerers else 0.0)
-        self.metrics.record(out.answer == peers_mod.CORRECT, self.now - q.t,
-                            out.probes, out.audits, exposure)
+        correct = out.answer == peers_mod.CORRECT
+        self.metrics.record(correct, self.now - q.t, out.probes, out.audits, exposure)
+        self.policy.on_finish(out, correct, self.now - q.t)
         self.completed += 1
         if self.cfg.whitewash and self.completed % 25 == 0:
             prov = self.policy.provider
@@ -185,6 +194,8 @@ class Sim:
         out["oracle_single"] = self.fleet.oracle_single()
         out["whitewashes"] = self.whitewashes
         out["policy_name"] = self.policy.name
+        if getattr(self.policy, "Q", None) is not None:
+            out["rl_q"] = self.policy.Q
         out["config"] = dict(self.cfg.__dict__)
         return out
 
