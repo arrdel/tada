@@ -1,17 +1,17 @@
-"""Simulator of a decentralized LLM-agent network with untrusted peers.
+"""Discrete-event simulator of a decentralized LLM-agent network with
+untrusted peers.
 
-Queries arrive as a Poisson process. A query's owner runs a delegation policy,
-which dispatches copies of the query to peers. Each peer is a FIFO single
-server (M/M/1); remote peers add a network delay each way. Answers are
-multiple-choice labels produced by the peer's behaviour model.
-
-Simplifications, stated in the report:
-  * Queries are handled in arrival order and each peer keeps a `next_free`
-    clock, which gives exact FIFO queueing without an event heap.
-  * Trust learned from a query is available to the next query immediately,
-    even though the answers would arrive tens of milliseconds later.
+Queries arrive as a Poisson process. Each query's owner runs a delegation
+policy, written as a generator: it yields a batch of peers, the simulator
+delivers the batch's answers once they have all come back, and the policy
+either yields another batch or returns an `Outcome`. Each peer is a FIFO single
+server with exponential service times; remote peers add a network delay each
+way. Trust is updated only when answers actually arrive.
 """
+from collections import deque
 from dataclasses import dataclass
+import heapq
+
 import numpy as np
 
 from . import peers as peers_mod
@@ -28,18 +28,24 @@ class Config:
     camouflage: float = 0.0       # colluders answer correctly w.p. camouflage
     policy: str = "tada"
     committee_size: int = 5       # fixed-committee baselines
-    beta: float = 5.0             # load aversion (per second of backlog)
+    beta: float = 5.0             # load aversion (per second of queued work)
     arrival_rate: float = 50.0    # aggregate queries/sec
     n_queries: int = 5000
     rtt: float = 0.005            # one-way network delay to a remote peer, s
     # TADA knobs
     tau: float = 0.9              # stop asking once answer confidence >= tau
     m_max: int = 5                # most peers asked for one query
+    first_round: int = 3          # peers asked in the first round
     round_size: int = 2           # peers added per escalation round
     p_audit: float = 0.15         # gold-question audits per user query
     conf_min: float = 0.5         # learn from agreement only if the audit-anchored
                                   # answer matches and is at least this confident
     theta_s: float = 0.3          # PPAI shortlist threshold on reported relevance
+    delta: float = 0.15           # slack on the pooled audit cap
+    # ablation switches
+    anchor: bool = True           # anchored agreement learning
+    pool_cap: bool = True         # cap trust by pooled (all-cluster) audits
+    sequential: bool = True       # escalate in rounds; False = ask m_max at once
     # identity dynamics
     whitewash: bool = False       # adversaries re-join when their reputation drops
     whitewash_threshold: float = 0.4
@@ -62,63 +68,124 @@ class Sim:
         self.fleet = peers_mod.build_fleet(
             cfg.n_peers, cfg.adversary_fraction, cfg.adversary_type, self.rng,
             camouflage=cfg.camouflage)
-        self.next_free = np.zeros(cfg.n_peers)
         self.policy = make_policy(cfg, self.fleet)
+        n = cfg.n_peers
+        self.queues = [deque() for _ in range(n)]
+        self.busy = np.zeros(n, dtype=bool)
+        self.inflight = np.zeros(n)      # jobs sent to a peer and not yet served
+        self.now = 0.0
+        self._heap, self._seq = [], 0
         self._canary_qid = 0
+        self.metrics = Metrics()
+        self.completed = 0
+        self.whitewashes = 0
 
-    def load(self, t):
-        """Seconds of queued work at every peer (what PPAI polls)."""
-        return np.maximum(0.0, self.next_free - t)
+    # ---- interface used by policies ---------------------------------------
+    def load(self):
+        """Expected seconds of queued work at every peer (what PPAI polls)."""
+        return self.inflight / self.fleet.mu
 
     def canary_qid(self):
         self._canary_qid -= 1
         return self._canary_qid
 
-    def dispatch(self, pid, q, t_send, qid=None):
-        """Send query `q` to peer `pid` at time `t_send`.
-        Returns (answer, time the answer is back at the owner)."""
+    def send(self, pid, q, qid, on_reply):
+        """Send a copy of query `q` (answer key `qid`) to peer `pid`;
+        `on_reply(answer)` fires when the answer is back at the owner."""
         net = 0.0 if pid == q.owner else self.cfg.rtt
-        start = max(t_send + net, self.next_free[pid])
-        finish = start + self.rng.exponential(1.0 / self.fleet.mu[pid])
-        self.next_free[pid] = finish
-        answer = self.fleet.answer(pid, q.k, q.qid if qid is None else qid)
-        return answer, finish + net
+        self.inflight[pid] += 1
+        self._push(self.now + net, self._peer_arrival, (pid, q.k, qid, net, on_reply))
+
+    # ---- event machinery ---------------------------------------------------
+    def _push(self, t, fn, data):
+        heapq.heappush(self._heap, (t, self._seq, fn, data))
+        self._seq += 1
+
+    def _peer_arrival(self, job):
+        pid = job[0]
+        self.queues[pid].append(job)
+        if not self.busy[pid]:
+            self._start(pid)
+
+    def _start(self, pid):
+        job = self.queues[pid].popleft()
+        self.busy[pid] = True
+        self._push(self.now + self.rng.exponential(1.0 / self.fleet.mu[pid]),
+                   self._peer_done, job)
+
+    def _peer_done(self, job):
+        pid, k, qid, net, on_reply = job
+        self.busy[pid] = False
+        self.inflight[pid] -= 1
+        answer = self.fleet.answer(pid, k, qid)
+        self._push(self.now + net, lambda _: on_reply(answer), None)
+        if self.queues[pid]:
+            self._start(pid)
+
+    def _advance(self, gen, q, value):
+        try:
+            batch = gen.send(value)
+        except StopIteration as stop:
+            self._finish(q, stop.value)
+            return
+        replies = [None] * len(batch)
+        pending = [len(batch)]
+
+        def make_cb(i):
+            def cb(answer):
+                replies[i] = answer
+                pending[0] -= 1
+                if pending[0] == 0:
+                    self._advance(gen, q, replies)
+            return cb
+
+        for i, pid in enumerate(batch):
+            self.send(int(pid), q, q.qid, make_cb(i))
+
+    def _finish(self, q, out):
+        fleet = self.fleet
+        exposure = (float(np.mean(fleet.adversary[out.answerers]))
+                    if out.answerers else 0.0)
+        self.metrics.record(out.answer == peers_mod.CORRECT, self.now - q.t,
+                            out.probes, out.audits, exposure)
+        self.completed += 1
+        if self.cfg.whitewash and self.completed % 25 == 0:
+            prov = self.policy.provider
+            for pid in np.flatnonzero(fleet.adversary):
+                if (prov.evidence(pid) >= 5
+                        and prov.reputation(pid) < self.cfg.whitewash_threshold):
+                    prov.reset(int(pid))
+                    self.whitewashes += 1
+
+    def _arrival(self, i):
+        cfg, rng = self.cfg, self.rng
+        q = Query(i, self.now, int(rng.integers(cfg.n_peers)),
+                  int(rng.integers(profiles.N_CLUSTERS)))
+        gen = self.policy.process(q, self)
+        self._advance(gen, q, None)
+        if i + 1 < cfg.n_queries:
+            self._push(self.now + rng.exponential(1.0 / cfg.arrival_rate),
+                       self._arrival, i + 1)
+
+    def _churn(self, _):
+        self.policy.provider.reset(int(self.rng.integers(self.cfg.n_peers)))
+        self._push(self.now + self.rng.exponential(1.0 / self.cfg.churn_rate),
+                   self._churn, None)
 
     def run(self) -> dict:
-        cfg, rng, fleet = self.cfg, self.rng, self.fleet
-        provider = self.policy.provider
-        adv_ids = np.flatnonzero(fleet.adversary)
-        metrics = Metrics()
-        whitewashes = 0
-        next_churn = (rng.exponential(1.0 / cfg.churn_rate)
-                      if cfg.churn_rate > 0 else np.inf)
-        t = 0.0
-        for i in range(cfg.n_queries):
-            t += rng.exponential(1.0 / cfg.arrival_rate)
-            while t >= next_churn:
-                provider.reset(int(rng.integers(cfg.n_peers)))
-                next_churn += rng.exponential(1.0 / cfg.churn_rate)
+        self._push(self.rng.exponential(1.0 / self.cfg.arrival_rate), self._arrival, 0)
+        if self.cfg.churn_rate > 0:
+            self._push(self.rng.exponential(1.0 / self.cfg.churn_rate), self._churn, None)
+        while self._heap and self.completed < self.cfg.n_queries:
+            t, _, fn, data = heapq.heappop(self._heap)
+            self.now = t
+            fn(data)
 
-            q = Query(i, t, int(rng.integers(cfg.n_peers)),
-                      int(rng.integers(profiles.N_CLUSTERS)))
-            out = self.policy.handle(q, self)
-            exposure = (float(np.mean(fleet.adversary[out.answerers]))
-                        if out.answerers else 0.0)
-            metrics.record(out.answer == peers_mod.CORRECT, out.latency,
-                           out.probes, out.audits, exposure)
-
-            if cfg.whitewash and i % 25 == 0:
-                for pid in adv_ids:
-                    if (provider.evidence(pid) >= 5
-                            and provider.reputation(pid) < cfg.whitewash_threshold):
-                        provider.reset(int(pid))
-                        whitewashes += 1
-
-        out = metrics.summary()
-        out["oracle_single"] = fleet.oracle_single()
-        out["whitewashes"] = whitewashes
+        out = self.metrics.summary()
+        out["oracle_single"] = self.fleet.oracle_single()
+        out["whitewashes"] = self.whitewashes
         out["policy_name"] = self.policy.name
-        out["config"] = dict(cfg.__dict__)
+        out["config"] = dict(self.cfg.__dict__)
         return out
 
 

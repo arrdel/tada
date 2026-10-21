@@ -147,10 +147,12 @@ class AuditedBeta(BetaAgreement):
 
     def acc_vec(self, k):
         agree = self.a[:, k] / (self.a[:, k] + self.b[:, k])
-        cap_k = self._audit_ucb(self.ga[:, k], self.gb[:, k])
-        K = self.K
-        cap_pool = self._audit_ucb(self.ga.sum(1) - K + 1, self.gb.sum(1) - K + 1)
-        return np.minimum(agree, np.minimum(cap_k, cap_pool + self.delta))
+        cap = self._audit_ucb(self.ga[:, k], self.gb[:, k])
+        if self.delta is not None:
+            K = self.K
+            cap_pool = self._audit_ucb(self.ga.sum(1) - K + 1, self.gb.sum(1) - K + 1)
+            cap = np.minimum(cap, cap_pool + self.delta)
+        return np.minimum(agree, cap)
 
     def verified_vec(self):
         """Pessimistic, audit-only accuracy (pooled lower confidence bound),

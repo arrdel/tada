@@ -20,5 +20,6 @@ def make_policy(cfg, fleet):
         return routing.Committee(cfg, trust.EigenTrust(n, K, fleet.pretrusted),
                                  "EigenTrust (m=%d)" % m)
     if name == "tada":
-        return routing.TADA(cfg, trust.AuditedBeta(n, K))
+        delta = cfg.delta if cfg.pool_cap else None
+        return routing.TADA(cfg, trust.AuditedBeta(n, K, delta=delta))
     raise ValueError("unknown policy %r" % name)
