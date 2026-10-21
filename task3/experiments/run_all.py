@@ -283,8 +283,8 @@ def figures(rob, cost, load):
     save_fig(fig, "cost_load_learning")
 
     # Compact 4-panel summary: serif for the report, sans for the slides.
-    def summary(name):
-        fig, axes = plt.subplots(1, 4, figsize=(5.5, 1.62))
+    def summary(name, size=(5.5, 1.62)):
+        fig, axes = plt.subplots(1, 4, figsize=size)
         for ax, adv, title in zip(axes[:2], ["skill_liar", "collude"],
                                   ["(a) Skill liars", "(b) Colluders"]):
             for key, lab, col, _ in METHODS:
@@ -336,6 +336,7 @@ def figures(rob, cost, load):
         save_fig(fig, name)
 
     summary("summary")
+    summary("summary_ieee", size=(7.0, 1.75))
     with plt.rc_context({"font.family": "sans-serif",
                          "font.sans-serif": ["Liberation Sans", "Arial", "DejaVu Sans"]}):
         summary("summary_sans")
