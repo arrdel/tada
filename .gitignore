@@ -13,6 +13,8 @@ todo.md
 *.fls
 *.fdb_latexmk
 *.synctex.gz
+*.bbl
+*.blg
 
 # Python
 __pycache__/
@@ -26,3 +28,7 @@ __pycache__/
 # Copyrighted paper (keep local copies only)
 21-PPAI_*.pdf
 presentation/figures/paper.pdf
+
+# Report build duplicates and submission bundle
+report/progress_report.pdf
+report/*Supplemental Code.zip
