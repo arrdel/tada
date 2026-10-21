@@ -194,7 +194,8 @@ def figures(rob, cost, load):
         ax.set_ylim(0, 1)
         ax.grid(axis="y", color="#E6E6E6", lw=0.6)
     axes[0].set_ylabel("Accuracy")
-    axes[1].legend(loc="upper right", fontsize=6.5, handlelength=1.4)
+    axes[1].legend(loc="center right", bbox_to_anchor=(1.0, 0.42), fontsize=6.5,
+                   handlelength=1.4)
     save_fig(fig, "robustness")
 
     # Figure 2: (a) cost-accuracy, (b) latency under load, (c) learning curve.
@@ -215,7 +216,7 @@ def figures(rob, cost, load):
     ax.set_ylabel("Accuracy")
     ax.set_title("(a) Cost vs. accuracy")
     ax.set_ylim(0, 1)
-    ax.legend(fontsize=5.6, loc="center right", handlelength=1.2)
+    ax.legend(fontsize=5.6, loc="center left", bbox_to_anchor=(0.0, 0.36), handlelength=1.2)
     ax.grid(axis="y", color="#E6E6E6", lw=0.6)
 
     ax = axes[1]
@@ -249,8 +250,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", type=int, default=5)
     ap.add_argument("--procs", type=int, default=min(32, os.cpu_count() or 1))
+    ap.add_argument("--figures-only", action="store_true",
+                    help="redraw figures from the saved JSON results")
     args = ap.parse_args()
     os.makedirs(FIG, exist_ok=True)
+    if args.figures_only:
+        load_json = lambda n: json.load(open(os.path.join(OUT, n + ".json")))
+        figures(load_json("robustness"), load_json("cost"), load_json("load"))
+        return
     seeds = list(range(args.seeds))
     with Pool(args.procs) as pool:
         rob = exp_robustness(seeds, pool)
