@@ -1,2 +1,13 @@
 numpy>=1.24
 matplotlib>=3.7
+# Real-answer collection (use the `ppai` conda env; see README)
+torch==2.5.1
+transformers==4.48.3
+accelerate>=0.34
+datasets==3.2.0
+sentencepiece
+protobuf
+tqdm
+huggingface_hub>=0.26,<1
+# Optional fast path (install separately if desired):
+#   pip install vllm

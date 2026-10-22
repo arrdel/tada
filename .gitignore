@@ -31,3 +31,9 @@ __pycache__/
 # Deck and progress report stay local (not on the remote)
 presentation/
 report/
+
+# Real-answer traces are large; keep a tiny smoke sample if committed explicitly
+task3/data/traces/**/*.jsonl
+!task3/data/traces/.gitkeep
+task3/data/questions/**/*.jsonl
+!task3/data/questions/.gitkeep

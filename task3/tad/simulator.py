@@ -18,6 +18,7 @@ from . import peers as peers_mod
 from . import profiles
 from .metrics import Metrics
 from .policies import make_policy
+from .traces import TraceBank, get_bank
 
 
 @dataclass
@@ -58,6 +59,9 @@ class Config:
     whitewash: bool = False       # adversaries re-join when their reputation drops
     whitewash_threshold: float = 0.4
     churn_rate: float = 0.0       # identity resets per second, any peer
+    # real-answer traces (from `python -m collect.collect_answers`)
+    use_traces: bool = False
+    traces_root: object = None    # Path or None → data/traces
     seed: int = 0
 
 
@@ -67,15 +71,20 @@ class Query:
     t: float
     owner: int
     k: int
+    trace_id: object = None       # str question id when use_traces is on
 
 
 class Sim:
     def __init__(self, cfg: Config):
         self.cfg = cfg
         self.rng = np.random.default_rng(cfg.seed)
+        self.traces = None
+        if cfg.use_traces:
+            self.traces = (get_bank(cfg.traces_root, reload=True)
+                           if cfg.traces_root is not None else get_bank(reload=True))
         self.fleet = peers_mod.build_fleet(
             cfg.n_peers, cfg.adversary_fraction, cfg.adversary_type, self.rng,
-            camouflage=cfg.camouflage)
+            camouflage=cfg.camouflage, traces=self.traces)
         self.policy = make_policy(cfg, self.fleet)
         n = cfg.n_peers
         self.queues = [deque() for _ in range(n)]
@@ -148,7 +157,8 @@ class Sim:
             return cb
 
         for i, pid in enumerate(batch):
-            self.send(int(pid), q, q.qid, make_cb(i))
+            key = q.trace_id if q.trace_id is not None else q.qid
+            self.send(int(pid), q, key, make_cb(i))
 
     def _finish(self, q, out):
         fleet = self.fleet
@@ -166,10 +176,23 @@ class Sim:
                     prov.reset(int(pid))
                     self.whitewashes += 1
 
+    def _pick_cluster_and_trace(self):
+        """Sample a cluster (and a real question id when traces are loaded)."""
+        cfg, rng = self.cfg, self.rng
+        if self.traces is None:
+            return int(rng.integers(profiles.N_CLUSTERS)), None
+        # Prefer clusters that have at least one traced question.
+        usable = [k for k in range(profiles.N_CLUSTERS) if self.traces.question_ids(k)]
+        if not usable:
+            return int(rng.integers(profiles.N_CLUSTERS)), None
+        k = int(rng.choice(usable))
+        qids = self.traces.question_ids(k)
+        return k, qids[int(rng.integers(len(qids)))]
+
     def _arrival(self, i):
         cfg, rng = self.cfg, self.rng
-        q = Query(i, self.now, int(rng.integers(cfg.n_peers)),
-                  int(rng.integers(profiles.N_CLUSTERS)))
+        k, trace_id = self._pick_cluster_and_trace()
+        q = Query(i, self.now, int(rng.integers(cfg.n_peers)), k, trace_id)
         gen = self.policy.process(q, self)
         self._advance(gen, q, None)
         if i + 1 < cfg.n_queries:

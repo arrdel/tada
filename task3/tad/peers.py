@@ -2,8 +2,11 @@
 
 A peer advertises a *reported* capability vector (what PPAI's router sees) and
 has a *true* capability. For honest peers these agree; adversaries lie.
+
+When a TraceBank of real model answers is attached, honest peers look up their
+answer for the query's question id instead of sampling from Table I.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import numpy as np
 
 from . import profiles
@@ -25,9 +28,11 @@ class Fleet:
     true_cap: np.ndarray     # (n, K) true accuracy of honest behaviour
     mu: np.ndarray           # (n,) service rate, queries/sec
     behavior: list           # (n,) behaviour string
+    agent_type: list         # (n,) key into profiles.AGENT_TYPES
     pretrusted: np.ndarray   # ids of bootstrap peers known to be honest (EigenTrust)
     rng: np.random.Generator
     camouflage: float = 0.0  # prob. a colluder answers correctly to look honest
+    traces: object = None    # optional TraceBank
 
     def __post_init__(self):
         self.adversary = np.array([b != HONEST for b in self.behavior])
@@ -43,20 +48,30 @@ class Fleet:
             return 0.0
         return float(self.true_cap[honest].max(axis=0).mean())
 
-    def answer(self, pid: int, k: int, qid: int) -> int:
-        """Answer option chosen by peer `pid` for query `qid` of cluster `k`."""
+    def answer(self, pid: int, k: int, qid) -> int:
+        """Answer option chosen by peer `pid` on cluster `k`.
+
+        `qid` is either a string question id (real traces) or an int (synthetic
+        / gold-question canaries use negative ints).
+        """
         b, rng = self.behavior[pid], self.rng
         if b == COLLUDE:
             if rng.random() < self.camouflage:
                 return CORRECT
-            # Same wrong option for every colluder on this query.
-            return 1 + (qid * 2654435761) % (N_OPTIONS - 1)
+            seed = qid if isinstance(qid, int) else hash(qid) & 0xFFFFFFFF
+            return 1 + (seed * 2654435761) % (N_OPTIONS - 1)
         if b == RANDOM_WRONG:
             return int(rng.integers(N_OPTIONS))
         if b == SKILL_LIAR:
             if rng.random() < 0.15:
                 return CORRECT
             return 1 + int(rng.integers(N_OPTIONS - 1))
+
+        # Honest (and free-rider content): real trace if available.
+        if (self.traces is not None and isinstance(qid, str)
+                and self.traces.has(self.agent_type[pid], k, qid)):
+            return int(self.traces.choice(self.agent_type[pid], k, qid))
+
         if rng.random() < self.true_cap[pid, k]:
             return CORRECT
         return 1 + int(rng.choice(N_OPTIONS - 1, p=DISTRACTOR_P))
@@ -64,11 +79,20 @@ class Fleet:
 
 def build_fleet(n_peers: int, adversary_fraction: float, adversary_type: str,
                 rng: np.random.Generator, cap_noise: float = 0.03,
-                camouflage: float = 0.0, n_pretrusted: int = 3) -> Fleet:
+                camouflage: float = 0.0, n_pretrusted: int = 3,
+                traces=None, use_trace_accuracy: bool = True) -> Fleet:
     K = profiles.N_CLUSTERS
     acc = profiles.acc_matrix()
+    if traces is not None and use_trace_accuracy:
+        emp = traces.empirical_accuracy()
+        for i in range(acc.shape[0]):
+            for k in range(K):
+                if not np.isnan(emp[i, k]):
+                    acc[i, k] = emp[i, k]
     n_types = acc.shape[0]
+    types = profiles.AGENT_TYPES
 
+    agent_type = [types[i % n_types] for i in range(n_peers)]
     true_cap = np.clip(
         np.array([acc[i % n_types] for i in range(n_peers)])
         + rng.normal(0, cap_noise, size=(n_peers, K)), 0.0, 1.0)
@@ -88,4 +112,5 @@ def build_fleet(n_peers: int, adversary_fraction: float, adversary_type: str,
     pretrusted = rng.choice(honest_ids, size=min(n_pretrusted, len(honest_ids)),
                             replace=False)
     return Fleet(rep_cap=rep_cap, true_cap=true_cap, mu=mu, behavior=behavior,
-                 pretrusted=pretrusted, rng=rng, camouflage=camouflage)
+                 agent_type=agent_type, pretrusted=pretrusted, rng=rng,
+                 camouflage=camouflage, traces=traces)

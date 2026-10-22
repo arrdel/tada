@@ -64,10 +64,12 @@ Full ablation in `results/ablation_table.md`. Highlights:
 | Path | Role |
 |---|---|
 | `tad/profiles.py` | 5 agent types × 5 clusters, accuracies from PPAI Table I; 4-option answers with a shared distractor |
-| `tad/peers.py` | honest peers and adversaries: skill liar, random, colluder, free rider; camouflage |
+| `tad/peers.py` | honest peers and adversaries; looks up real answers when a TraceBank is attached |
+| `tad/traces.py` | loads `data/traces/` into the simulator |
 | `tad/simulator.py` | discrete-event simulator: Poisson arrivals, FIFO peer queues, network delay, whitewashing, churn |
 | `tad/trust.py` | trust providers: none, agreement Beta, Dawid–Skene (EM), EigenTrust, TADA's audited Beta |
 | `tad/routing.py` | policies as processes: PPAI argmax, fixed committees, TADA (threshold or Q-learning) |
+| `collect/` | dataset loaders, prompts, HF/vLLM backends, CLI to produce traces |
 | `experiments/run_all.py` | every experiment, figure and table in the report |
 | `tests/test_tad.py` | sanity tests |
 
@@ -78,11 +80,51 @@ python -m pytest -q
 python -m experiments.run_all        # ~1.5 min on 32 cores; writes results/
 ```
 
+## Real-answer collection (in progress)
+
+The simulator can run on **real** per-question answers from the five PPAI
+checkpoints instead of sampling from Table I. Collection lives in `collect/`.
+
+| Agent key | Hugging Face id | Gated? |
+|---|---|---|
+| `A1_qwen` | `Qwen/Qwen2.5-7B-Instruct` | no |
+| `A2_deepseek` | `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B` | no |
+| `A3_nemotron` | `nvidia/OpenCodeReasoning-Nemotron-7B` | no |
+| `A4_huatuo` | `FreedomIntelligence/HuatuoGPT-o1-7B` | no |
+| `A5_llama` | `meta-llama/Meta-Llama-3-8B-Instruct` | yes (HF token) |
+
+```bash
+# one-time: conda env with CUDA 12.1 torch (driver 530 / CUDA 12.1 on this box)
+conda activate ppai   # already created; or: conda create -n ppai python=3.11
+pip install -r requirements.txt
+
+# smoke test (~a few minutes, downloads Qwen2.5-7B once)
+./scripts/run_collect.sh smoke
+
+# all open agents on one cluster, then everything
+./scripts/run_collect.sh open MMLU
+./scripts/run_collect.sh open all
+# Llama-3 (after `huggingface-cli login` or export HF_TOKEN=...)
+./scripts/run_collect.sh A5_llama all
+
+# coverage / empirical accuracy vs Table I
+python -m collect.status
+```
+
+Traces land in `data/traces/<agent>/<cluster>.jsonl`. Point the simulator at them:
+
+```python
+from tad.simulator import Config, run
+run(Config(use_traces=True, policy="tada", adversary_type="collude",
+           adversary_fraction=0.3))
+```
+
+Optional: set `BACKEND=vllm` once `pip install vllm` succeeds in the env.
+
 ## Next steps
 
-- Replace the synthetic answer model with real per-question answers of the five
-  models (run them with vLLM on MMLU / GSM8K / MedQA / ARC-C / AGIEval), so
-  error correlations are real.
+- Finish the full answer sweep (5 agents × 5 clusters) and re-run the
+  Milestone-2 experiments with `use_traces=True`.
 - Real arrival traces (Azure LLM inference, BurstGPT).
 - Better learned control: credit assignment per round, contextual bandit for
   whom to audit, adaptive audit rate.
