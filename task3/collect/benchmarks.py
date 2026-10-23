@@ -136,13 +136,19 @@ def load_agieval() -> list[dict]:
     """AGIEval English / Gaokao subsets used as PPAI's out-of-distribution set."""
     out = []
     for subset in _AGIEVAL_SUBSETS:
-        try:
-            ds = load_dataset("hails/agieval", subset, split="test")
-        except Exception:
+        ds = None
+        for repo, cfg in [
+            (f"dmayhem93/agieval-{subset}", None),
+            ("hails/agieval", subset),
+            ("agieval", subset),
+        ]:
             try:
-                ds = load_dataset("agieval", subset, split="test")
+                ds = load_dataset(repo, cfg, split="test") if cfg else load_dataset(repo, split="test")
+                break
             except Exception:
                 continue
+        if ds is None:
+            continue
         for i, row in enumerate(ds):
             # hails/agieval schema: query, choices, gold
             q = row.get("query") or row.get("question") or ""

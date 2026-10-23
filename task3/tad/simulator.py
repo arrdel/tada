@@ -80,8 +80,8 @@ class Sim:
         self.rng = np.random.default_rng(cfg.seed)
         self.traces = None
         if cfg.use_traces:
-            self.traces = (get_bank(cfg.traces_root, reload=True)
-                           if cfg.traces_root is not None else get_bank(reload=True))
+            self.traces = (get_bank(cfg.traces_root)
+                           if cfg.traces_root is not None else get_bank())
         self.fleet = peers_mod.build_fleet(
             cfg.n_peers, cfg.adversary_fraction, cfg.adversary_type, self.rng,
             camouflage=cfg.camouflage, traces=self.traces)
