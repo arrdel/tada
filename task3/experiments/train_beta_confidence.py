@@ -1,7 +1,3 @@
-# Copyright (C) 2026 Lenovo
-# All Rights Reserved.
-# Lenovo Confidential Restricted.
-
 """GPU Actor-Critic + Simulator Policy-Gradient training for Trainable Beta,
 combined with Trust-Aware + Agent Self-Confidence + Peer Availability routing.
 
