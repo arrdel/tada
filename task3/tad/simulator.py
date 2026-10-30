@@ -72,9 +72,9 @@ class Config:
     beta_trainable: bool = False
     beta_train: bool = False
     beta_weights: object = None
-    beta_min: float = 0.2
-    beta_max: float = 12.0
-    beta_lr: float = 0.04
+    beta_min: float = 1.5
+    beta_max: float = 10.0
+    beta_lr: float = 0.02
     seed: int = 0
 
 

@@ -83,11 +83,11 @@ class TrainableBetaController:
 
     def __init__(
         self,
-        beta_min: float = 0.2,
-        beta_max: float = 12.0,
-        init_beta: float = 4.0,
-        lr: float = 0.04,
-        explore_std: float = 0.25,
+        beta_min: float = 1.5,
+        beta_max: float = 10.0,
+        init_beta: float = 4.5,
+        lr: float = 0.02,
+        explore_std: float = 0.15,
         train: bool = False,
         weights: dict | np.ndarray | list | None = None,
     ):
