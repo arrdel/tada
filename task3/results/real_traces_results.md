@@ -1,6 +1,6 @@
-# Task III — Real LLM Trace Collection & TADA Benchmark Results
+# Task III — Complete 5-Agent Real LLM Trace Collection & TADA Benchmark Results
 
-**Total per-question LLM traces collected:** `81,620` (100% coverage of all `20,405` benchmark items across all 4 open PPAI 7B edge models: `A1_qwen`, `A2_deepseek`, `A3_nemotron`, `A4_huatuo` on `MMLU`, `GSM8K`, `MedQA`, `ARC-C`, and `AGIEval`).
+**Total per-question LLM traces collected:** `102,025` (**100% coverage** of all `20,405` benchmark items across **all 5 PPAI 7–8B edge models**: `A1_qwen`, `A2_deepseek`, `A3_nemotron`, `A4_huatuo`, and `A5_llama` on `MMLU`, `GSM8K`, `MedQA`, `ARC-C`, and `AGIEval`; `ready for full sim: True`).
 
 ---
 
@@ -12,52 +12,42 @@
 | **A2_deepseek** | `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B` | 42.2% | 82.7% | 28.8% | 49.8% | 40.8% |
 | **A3_nemotron** | `nvidia/OpenCodeReasoning-Nemotron-7B` | 45.2% | 46.3% | 33.2% | 54.9% | 40.6% |
 | **A4_huatuo** | `FreedomIntelligence/HuatuoGPT-o1-7B` | 64.8% | 85.4% | **67.1%** | 81.4% | 48.3% |
-| **A5_llama** | `meta-llama/Meta-Llama-3-8B-Instruct` | *gated* | *gated* | *gated* | *gated* | *gated* |
+| **A5_llama** | `NousResearch/Meta-Llama-3-8B-Instruct` | 62.7% | 80.0% | 59.9% | 80.2% | 38.2% |
 
-### Per-Response Self-Confidence Calibration Across All 81,620 Traces
-| Agent | Explicit Answer Marker (`Answer: X` / `#### N`) | Truncated / Implicit Reasoning |
-|---|---:|---:|
-| **A1_qwen** | **70.6%** (`n = 20,183`) | 18.0% (`n = 222`) |
-| **A2_deepseek** | **57.2%** (`n = 6,416`) | 38.3% (`n = 13,989`) |
-| **A3_nemotron** | **64.0%** (`n = 7,959`) | 32.0% (`n = 12,446`) |
-| **A4_huatuo** | **70.3%** (`n = 16,445`) | 43.7% (`n = 3,960`) |
-
----
-
-## 2. Multi-Agent Ensemble & Error Correlation on Real Traces (`A1`–`A4`)
-
-Evaluated on all `20,405` common questions answered by all four open models:
-
-| Benchmark | Common Questions | Best Single Agent | 4-Agent Majority Vote | Oracle Union (≥1 right) | Pairwise Wrong-Answer Agreement |
+### Reference: PPAI INFOCOM 2026 Table I
+| Agent | MMLU | GSM8K | MedQA | ARC-C | AGIEval |
 |---|---:|---:|---:|---:|---:|
-| **MMLU** | 14,042 | 69.68% (A1) | **71.11%** (+1.43 pts) | 87.70% | 57.83% |
-| **GSM8K** | 1,319 | 87.04% (A1) | **91.13%** (+4.09 pts) | 95.60% | 45.13% |
-| **MedQA** | 1,273 | **67.09%** (A4) | 66.61% | 84.68% | 52.64% |
-| **ARC-C** | 1,147 | **89.28%** (A1) | 88.32% | 95.99% | 64.32% |
-| **AGIEval** | 2,624 | **59.38%** (A1) | 58.73% | 78.24% | 62.76% |
+| **A1_qwen** | 71.2% | 64.5% | 46.9% | 85.3% | 61.1% |
+| **A2_deepseek** | 54.4% | 20.9% | 19.6% | 17.8% | 12.8% |
+| **A3_nemotron** | 63.0% | 33.3% | 37.2% | 68.9% | 48.4% |
+| **A4_huatuo** | 72.9% | 33.6% | 50.9% | 86.7% | 62.1% |
+| **A5_llama** | 64.0% | 59.4% | 58.1% | 74.7% | 39.2% |
 
 ---
 
-## 3. TADA Simulator Driven by Real LLM Traces (`use_traces=True`)
+## 2. 5-Agent Ensemble & Error Correlation on Real Traces (`A1`–`A5`)
 
-50 peers, 600 queries/run, $\lambda = 50$ queries/s, 5 random seeds per cell.
+Evaluated across all `20,405` benchmark items answered by all five models:
 
-### (a) Colluding Adversaries (`collude`: Accuracy / Probes per Query)
+| Benchmark | Questions | Best Single Agent | 5-Agent Majority Vote | Oracle Union (≥1 right) | Pairwise Wrong-Answer Agreement |
+|---|---:|---:|---:|---:|---:|
+| **MMLU** | 14,042 | 69.68% (A1) | **70.93%** (+1.25 pts) | 90.47% | 54.56% |
+| **GSM8K** | 1,319 | 87.04% (A1) | **91.28%** (+4.24 pts) | 96.29% | 46.35% |
+| **MedQA** | 1,273 | 67.09% (A4) | **67.87%** (+0.78 pts) | 88.53% | 50.82% |
+| **ARC-C** | 1,147 | **89.28%** (A1) | 88.23% | 96.60% | 59.38% |
+| **AGIEval** | 2,624 | **59.38%** (A1) | 51.49% | 78.85% | 67.74% |
 
-| Policy | 0% Adv | 10% Adv | 20% Adv | 30% Adv | 40% Adv | Avg Probes (30% Adv) |
-|---|---:|---:|---:|---:|---:|---:|
-| **PPAI (trust-blind)** | 73.7% | 5.6% | 0.0% | 0.0% | 0.0% | 1.00 |
-| **Majority Vote (5)** | **74.9%** | 55.2% | 30.0% | 13.8% | 6.7% | 5.00 |
-| **Dawid–Skene EM** | 74.5% | **66.2%** | 32.6% | 10.5% | 3.4% | 5.00 |
-| **EigenTrust** *(3 pre-trusted)* | 65.1% | 61.1% | **64.5%** | **64.4%** | **61.3%** | 5.00 |
-| **TADA (ours, 0 pre-trusted)** | 70.0% | 64.2% | 61.7% | 60.3% | 52.3% | **4.22 (−15.6%)** |
+---
 
-### (b) Skill-Liar Adversaries (`skill_liar`: Accuracy / Probes per Query)
+## 3. Progressive Ablation: Trust + Confidence + Availability + Trainable `β_θ(s)` (`λ = 80 q/s`, `25%` Colluders, `35%` Flaky Peers)
 
-| Policy | 0% Adv | 10% Adv | 20% Adv | 30% Adv | 40% Adv | Avg Probes (30% Adv) |
-|---|---:|---:|---:|---:|---:|---:|
-| **PPAI (trust-blind)** | 73.7% | 19.5% | 15.5% | 16.0% | 16.6% | 1.00 |
-| **Majority Vote (5)** | **74.9%** | 66.9% | 47.4% | 29.8% | 18.6% | 5.00 |
-| **Dawid–Skene EM** | 74.5% | **71.6%** | 65.4% | 58.5% | 49.5% | 5.00 |
-| **EigenTrust** *(3 pre-trusted)* | 65.1% | 62.8% | **66.3%** | **64.6%** | **66.0%** | 5.00 |
-| **TADA (ours, 0 pre-trusted)** | 70.0% | 64.8% | 65.7% | 63.3% | 61.9% | **4.38 (−12.4%)** |
+| Method | Accuracy | Steady-State Acc | p95 Latency (ms) | Probes / Query | Mean β |
+|---|---:|---:|---:|---:|---:|
+| **PPAI (trust-blind)** | 0.4% ± 0.5% | 0.6% | 188.2 ms | 1.00 | 5.00 |
+| **Majority Vote (m=5)** | 42.6% ± 2.2% | 41.9% | 340.4 ms | 5.00 | 5.00 |
+| **Dawid-Skene (m=5)** | 46.9% ± 3.5% | 48.2% | 311.7 ms | 5.00 | 5.00 |
+| **EigenTrust (m=5, 3 pre-trusted)** | 64.2% ± 2.2% | 65.9% | 312.6 ms | 5.00 | 5.00 |
+| **TADA (Trust only, fixed β=5)** | 62.7% ± 2.8% | 69.4% | 423.0 ms | 4.00 | 5.00 |
+| **TADA + Agent Confidence** | 64.4% ± 2.3% | 68.6% | 380.5 ms | 3.79 | 5.00 |
+| **TADA + Confidence + Availability** | 64.9% ± 3.9% | **70.2%** | 372.9 ms | 3.85 | 5.00 |
+| **TADA + Conf + Avail + Trainable β (Ours)** | **65.1% ± 4.7%** | **69.7%** | **362.5 ms** | **3.78** | **5.01** |
