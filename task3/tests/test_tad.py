@@ -70,3 +70,21 @@ def test_tada_resists_collusion_and_needs_audits():
 def test_tada_uses_fewer_probes_than_a_full_committee():
     r = run(Config(policy="tada", adversary_fraction=0.0, **FAST))
     assert r["probes_per_query"] < 5.0
+
+
+def test_confidence_and_availability_improve_flaky_network():
+    base = dict(policy="tada", adversary_type=peers.COLLUDE, adversary_fraction=0.2,
+                min_availability=0.45, unreliable_fraction=0.4, **FAST)
+    blind = run(Config(use_confidence=False, use_availability=False, **base))
+    aware = run(Config(use_confidence=True, use_availability=True, **base))
+    assert aware["accuracy"] >= blind["accuracy"]
+    assert aware["latency_p95_ms"] <= blind["latency_p95_ms"] + 25.0
+
+
+def test_trainable_beta_adapts_and_exports_weights():
+    r = run(Config(policy="tada", beta_trainable=True, beta_train=True,
+                   use_confidence=True, use_availability=True,
+                   min_availability=0.5, unreliable_fraction=0.3, **FAST))
+    assert "beta_weights" in r and len(r["beta_weights"]["w_linear"]) == 8
+    assert 0.2 <= r["mean_beta"] <= 12.0
+

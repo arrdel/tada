@@ -46,12 +46,38 @@ class TrustProvider:
 
     def __init__(self, n_peers: int, n_clusters: int):
         self.n, self.K = n_peers, n_clusters
+        # Observed availability Beta prior (~0.90 initial belief)
+        self.av_a = np.full(n_peers, 4.5, dtype=float)
+        self.av_b = np.full(n_peers, 0.5, dtype=float)
+        # Running EMA of agent self-confidence per (peer, cluster)
+        self.conf_ema = np.full((n_peers, n_clusters), 0.75, dtype=float)
 
     def acc_vec(self, k):
         return np.full(self.n, 0.5)
 
-    def aggregate(self, k, pids, labels, rng):
-        return weighted_plurality(labels, self.acc_vec(k)[list(pids)], rng)
+    def avail_vec(self):
+        """Estimated peer availability probability in (0, 1]."""
+        return self.av_a / (self.av_a + self.av_b)
+
+    def conf_vec(self, k):
+        """Historical mean self-confidence of each peer on cluster k."""
+        return self.conf_ema[:, k]
+
+    def record_availability(self, pid: int, available: bool):
+        if available:
+            self.av_a[pid] += 1.0
+        else:
+            self.av_b[pid] += 1.5
+
+    def record_confidence(self, pid: int, k: int, conf: float, alpha: float = 0.15):
+        self.conf_ema[pid, k] = (1.0 - alpha) * self.conf_ema[pid, k] + alpha * float(conf)
+
+    def aggregate(self, k, pids, labels, rng, confidences=None, conf_weight: float = 0.0):
+        weights = self.acc_vec(k)[list(pids)].astype(float)
+        if confidences is not None and conf_weight > 0.0:
+            c = np.asarray(confidences, dtype=float)
+            weights = weights * ((1.0 - conf_weight) + conf_weight * (c / 0.75))
+        return weighted_plurality(labels, weights, rng)
 
     def observe(self, k, pids, labels, answer, confidence):
         pass
@@ -60,7 +86,9 @@ class TrustProvider:
         pass
 
     def reset(self, pid):
-        pass
+        self.av_a[pid] = 4.5
+        self.av_b[pid] = 0.5
+        self.conf_ema[pid] = 0.75
 
     def reputation(self, pid) -> float:
         return float(np.mean([self.acc_vec(k)[pid] for k in range(self.K)]))
@@ -145,14 +173,17 @@ class AuditedBeta(BetaAgreement):
         mean = ga / n
         return mean + self.z * np.sqrt(mean * (1 - mean) / (n + 1))
 
-    def acc_vec(self, k):
-        agree = self.a[:, k] / (self.a[:, k] + self.b[:, k])
+    def _cap_vec(self, k):
         cap = self._audit_ucb(self.ga[:, k], self.gb[:, k])
         if self.delta is not None:
             K = self.K
             cap_pool = self._audit_ucb(self.ga.sum(1) - K + 1, self.gb.sum(1) - K + 1)
             cap = np.minimum(cap, cap_pool + self.delta)
-        return np.minimum(agree, cap)
+        return cap
+
+    def acc_vec(self, k):
+        agree = self.a[:, k] / (self.a[:, k] + self.b[:, k])
+        return np.minimum(agree, self._cap_vec(k))
 
     def verified_vec(self):
         """Pessimistic, audit-only accuracy (pooled lower confidence bound),
@@ -168,8 +199,17 @@ class AuditedBeta(BetaAgreement):
         ga, gb = self.ga[:, k], self.gb[:, k]
         return ga * gb / ((ga + gb) ** 2 * (ga + gb + 1))
 
-    def aggregate(self, k, pids, labels, rng):
-        return one_coin_posterior(labels, self.acc_vec(k)[list(pids)], rng)
+    def aggregate(self, k, pids, labels, rng, confidences=None, conf_weight: float = 0.0):
+        idx = list(pids)
+        accs = self.acc_vec(k)[idx].astype(float)
+        if confidences is not None and conf_weight > 0.0:
+            c = np.asarray(confidences, dtype=float)
+            # Modulate trusted accuracy by query-specific self-confidence,
+            # strictly bounded by the peer's audit UCB so liars cannot boost weight.
+            caps = self._cap_vec(k)[idx]
+            mod = accs * ((1.0 - conf_weight) + conf_weight * (c / 0.75))
+            accs = np.minimum(caps, mod)
+        return one_coin_posterior(labels, accs, rng)
 
     def aggregate_verified(self, pids, labels, rng):
         return one_coin_posterior(labels, self.verified_vec()[list(pids)], rng)
