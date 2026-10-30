@@ -61,7 +61,8 @@ def train_beta_actor_critic_gpu(
     dev = torch.device(device_str if torch.cuda.is_available() else "cpu")
     torch.manual_seed(42)
 
-    emp_acc = bank.empirical_accuracy()[:4]  # (4 open agents, 5 clusters)
+    emp_acc = bank.empirical_accuracy()  # (5 agents, 5 clusters)
+    n_agents = emp_acc.shape[0]
     emp_acc = np.nan_to_num(emp_acc, nan=0.6)
     emp_acc_t = torch.tensor(emp_acc, dtype=torch.float32, device=dev)
 
@@ -99,7 +100,7 @@ def train_beta_actor_critic_gpu(
         ep_betas = []
         for _ in range(25):
             k_idx = torch.randint(0, N_CLUSTERS, (batch_size,), device=dev)
-            agent_idx = torch.randint(0, 4, (batch_size, M), device=dev)
+            agent_idx = torch.randint(0, n_agents, (batch_size, M), device=dev)
             base_skill = emp_acc_t[agent_idx, k_idx.unsqueeze(1)]
 
             is_adv = (torch.rand((batch_size, M), device=dev) < 0.25).float()
@@ -486,7 +487,7 @@ def write_markdown_report(data: dict):
         "# Trust-Aware + Agent Confidence + Availability + Trainable β Results",
         "",
         f"- **GPU Training Hardware:** `{tr['gpu_name']}` (`{tr['device']}`, `{tr['elapsed_sec']}s`)",
-        "- **Real LLM Trace Bank:** `81,620` traces across `A1_qwen`, `A2_deepseek`, `A3_nemotron`, `A4_huatuo` (`20,405` common questions across all 5 benchmarks)",
+        "- **Real LLM Trace Bank:** `102,025` traces across all 5 PPAI agents (`A1_qwen`, `A2_deepseek`, `A3_nemotron`, `A4_huatuo`, `A5_llama`; `20,405` common questions across all 5 benchmarks)",
         "- **Network Environment:** `50` peers, `35%` flaky edge nodes (`availability ∈ [0.45, 0.85]`, `80 ms` dropout/retry penalty), `5` random seeds per point.",
         "",
         "## 1. Progressive Ablation Study (`λ = 80 q/s`, `25%` Colluders, `35%` Flaky Peers)",

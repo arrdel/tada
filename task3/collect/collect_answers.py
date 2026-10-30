@@ -94,9 +94,7 @@ def run_agent(agent_key: str, clusters: list[str], limit: int | None,
     if agent_key in ("A2_deepseek", "A3_nemotron", "A4_huatuo"):
         local_cfg.max_new_tokens = max(local_cfg.max_new_tokens, max_new_tokens_reason)
 
-    backend = build_backend(info["hf_id"], backend=backend_name, device=device,
-                            tensor_parallel=tensor_parallel)
-
+    backend = None
     for cluster in clusters:
         items = ensure_questions(cluster, limit)
         out_path = TRACES / agent_key / f"{cluster}.jsonl"
@@ -105,6 +103,9 @@ def run_agent(agent_key: str, clusters: list[str], limit: int | None,
         print(f"  {cluster}: {len(todo)} remaining / {len(items)} total -> {out_path}")
         if not todo:
             continue
+        if backend is None:
+            backend = build_backend(info["hf_id"], backend=backend_name, device=device,
+                                    tensor_parallel=tensor_parallel)
 
         t0 = time.time()
         n_ok = 0

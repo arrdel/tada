@@ -1,6 +1,6 @@
 {
-  "total_traces_collected": 81620,
-  "common_questions_across_A1_A4": {
+  "total_traces_collected": 102025,
+  "common_questions_across_A1_A5": {
     "MMLU": 14042,
     "GSM8K": 1319,
     "MedQA": 1273,
@@ -129,31 +129,31 @@
       }
     },
     "A5_llama": {
-      "hf_id": "meta-llama/Meta-Llama-3-8B-Instruct",
+      "hf_id": "NousResearch/Meta-Llama-3-8B-Instruct",
       "clusters": {
         "MMLU": {
-          "n_traced": 0,
-          "empirical_acc": null,
+          "n_traced": 14042,
+          "empirical_acc": 0.627,
           "paper_table1_acc": 0.6401
         },
         "GSM8K": {
-          "n_traced": 0,
-          "empirical_acc": null,
+          "n_traced": 1319,
+          "empirical_acc": 0.7998,
           "paper_table1_acc": 0.5939
         },
         "MedQA": {
-          "n_traced": 0,
-          "empirical_acc": null,
+          "n_traced": 1273,
+          "empirical_acc": 0.5994,
           "paper_table1_acc": 0.5808
         },
         "ARC-C": {
-          "n_traced": 0,
-          "empirical_acc": null,
+          "n_traced": 1147,
+          "empirical_acc": 0.8021,
           "paper_table1_acc": 0.7474
         },
         "AGIEval": {
-          "n_traced": 0,
-          "empirical_acc": null,
+          "n_traced": 2624,
+          "empirical_acc": 0.3822,
           "paper_table1_acc": 0.3918
         }
       }
@@ -163,52 +163,52 @@
     "MMLU": {
       "n_common_questions": 14042,
       "best_single_acc": 0.6968,
-      "majority_4agent_acc": 0.7111,
-      "oracle_union_acc": 0.877,
-      "pairwise_wrong_agreement": 0.5783
+      "majority_5agent_acc": 0.7093,
+      "oracle_union_acc": 0.9047,
+      "pairwise_wrong_agreement": 0.5456
     },
     "GSM8K": {
       "n_common_questions": 1319,
       "best_single_acc": 0.8704,
-      "majority_4agent_acc": 0.9113,
-      "oracle_union_acc": 0.956,
-      "pairwise_wrong_agreement": 0.4513
+      "majority_5agent_acc": 0.9128,
+      "oracle_union_acc": 0.9629,
+      "pairwise_wrong_agreement": 0.4635
     },
     "MedQA": {
       "n_common_questions": 1273,
       "best_single_acc": 0.6709,
-      "majority_4agent_acc": 0.6661,
-      "oracle_union_acc": 0.8468,
-      "pairwise_wrong_agreement": 0.5264
+      "majority_5agent_acc": 0.6787,
+      "oracle_union_acc": 0.8853,
+      "pairwise_wrong_agreement": 0.5082
     },
     "ARC-C": {
       "n_common_questions": 1147,
       "best_single_acc": 0.8928,
-      "majority_4agent_acc": 0.8832,
-      "oracle_union_acc": 0.9599,
-      "pairwise_wrong_agreement": 0.6432
+      "majority_5agent_acc": 0.8823,
+      "oracle_union_acc": 0.966,
+      "pairwise_wrong_agreement": 0.5938
     },
     "AGIEval": {
       "n_common_questions": 2624,
       "best_single_acc": 0.5938,
-      "majority_4agent_acc": 0.5873,
-      "oracle_union_acc": 0.7824,
-      "pairwise_wrong_agreement": 0.6276
+      "majority_5agent_acc": 0.5149,
+      "oracle_union_acc": 0.7885,
+      "pairwise_wrong_agreement": 0.6774
     }
   },
   "simulator_with_real_traces": {
     "collude": {
       "ppai": {
         "0.0": {
-          "accuracy_mean": 0.737,
-          "accuracy_std": 0.0137,
+          "accuracy_mean": 0.7353,
+          "accuracy_std": 0.0149,
           "p95_ms_mean": 158.8,
           "probes_mean": 1.0
         },
         "0.1": {
-          "accuracy_mean": 0.0557,
-          "accuracy_std": 0.0179,
-          "p95_ms_mean": 165.3,
+          "accuracy_mean": 0.053,
+          "accuracy_std": 0.0181,
+          "p95_ms_mean": 167.2,
           "probes_mean": 1.0
         },
         "0.2": {
@@ -232,129 +232,129 @@
       },
       "majority": {
         "0.0": {
-          "accuracy_mean": 0.749,
-          "accuracy_std": 0.0171,
-          "p95_ms_mean": 242.7,
+          "accuracy_mean": 0.714,
+          "accuracy_std": 0.0207,
+          "p95_ms_mean": 245.6,
           "probes_mean": 5.0
         },
         "0.1": {
-          "accuracy_mean": 0.552,
-          "accuracy_std": 0.0212,
-          "p95_ms_mean": 277.7,
+          "accuracy_mean": 0.5597,
+          "accuracy_std": 0.0236,
+          "p95_ms_mean": 275.7,
           "probes_mean": 5.0
         },
         "0.2": {
-          "accuracy_mean": 0.2997,
-          "accuracy_std": 0.0223,
-          "p95_ms_mean": 281.8,
+          "accuracy_mean": 0.311,
+          "accuracy_std": 0.02,
+          "p95_ms_mean": 276.4,
           "probes_mean": 5.0
         },
         "0.3": {
-          "accuracy_mean": 0.138,
-          "accuracy_std": 0.0053,
-          "p95_ms_mean": 268.1,
+          "accuracy_mean": 0.1363,
+          "accuracy_std": 0.0128,
+          "p95_ms_mean": 261.1,
           "probes_mean": 5.0
         },
         "0.4": {
-          "accuracy_mean": 0.0673,
-          "accuracy_std": 0.0128,
-          "p95_ms_mean": 252.4,
+          "accuracy_mean": 0.0667,
+          "accuracy_std": 0.0154,
+          "p95_ms_mean": 257.5,
           "probes_mean": 5.0
         }
       },
       "dawid_skene": {
         "0.0": {
-          "accuracy_mean": 0.745,
-          "accuracy_std": 0.0174,
-          "p95_ms_mean": 258.9,
+          "accuracy_mean": 0.7113,
+          "accuracy_std": 0.0064,
+          "p95_ms_mean": 249.3,
           "probes_mean": 5.0
         },
         "0.1": {
-          "accuracy_mean": 0.6623,
-          "accuracy_std": 0.0244,
-          "p95_ms_mean": 267.0,
+          "accuracy_mean": 0.6743,
+          "accuracy_std": 0.0215,
+          "p95_ms_mean": 252.7,
           "probes_mean": 5.0
         },
         "0.2": {
-          "accuracy_mean": 0.326,
-          "accuracy_std": 0.0759,
-          "p95_ms_mean": 293.9,
+          "accuracy_mean": 0.3737,
+          "accuracy_std": 0.0461,
+          "p95_ms_mean": 277.4,
           "probes_mean": 5.0
         },
         "0.3": {
-          "accuracy_mean": 0.1053,
-          "accuracy_std": 0.0255,
-          "p95_ms_mean": 278.9,
+          "accuracy_mean": 0.088,
+          "accuracy_std": 0.0136,
+          "p95_ms_mean": 283.2,
           "probes_mean": 5.0
         },
         "0.4": {
-          "accuracy_mean": 0.0343,
-          "accuracy_std": 0.009,
-          "p95_ms_mean": 274.4,
+          "accuracy_mean": 0.0377,
+          "accuracy_std": 0.0048,
+          "p95_ms_mean": 269.1,
           "probes_mean": 5.0
         }
       },
       "eigentrust": {
         "0.0": {
-          "accuracy_mean": 0.6507,
-          "accuracy_std": 0.0612,
-          "p95_ms_mean": 316.7,
+          "accuracy_mean": 0.6297,
+          "accuracy_std": 0.0618,
+          "p95_ms_mean": 311.7,
           "probes_mean": 5.0
         },
         "0.1": {
-          "accuracy_mean": 0.611,
-          "accuracy_std": 0.0374,
-          "p95_ms_mean": 291.0,
+          "accuracy_mean": 0.622,
+          "accuracy_std": 0.0432,
+          "p95_ms_mean": 296.2,
           "probes_mean": 5.0
         },
         "0.2": {
-          "accuracy_mean": 0.6453,
-          "accuracy_std": 0.06,
-          "p95_ms_mean": 320.7,
-          "probes_mean": 5.0
-        },
-        "0.3": {
-          "accuracy_mean": 0.644,
-          "accuracy_std": 0.0375,
+          "accuracy_mean": 0.6407,
+          "accuracy_std": 0.0381,
           "p95_ms_mean": 315.4,
           "probes_mean": 5.0
         },
+        "0.3": {
+          "accuracy_mean": 0.6387,
+          "accuracy_std": 0.028,
+          "p95_ms_mean": 322.2,
+          "probes_mean": 5.0
+        },
         "0.4": {
-          "accuracy_mean": 0.613,
-          "accuracy_std": 0.0206,
-          "p95_ms_mean": 319.2,
+          "accuracy_mean": 0.637,
+          "accuracy_std": 0.0418,
+          "p95_ms_mean": 318.5,
           "probes_mean": 5.0
         }
       },
       "tada": {
         "0.0": {
-          "accuracy_mean": 0.7003,
-          "accuracy_std": 0.015,
-          "p95_ms_mean": 340.5,
-          "probes_mean": 3.8
+          "accuracy_mean": 0.6737,
+          "accuracy_std": 0.0364,
+          "p95_ms_mean": 350.3,
+          "probes_mean": 3.93
         },
         "0.1": {
-          "accuracy_mean": 0.6417,
-          "accuracy_std": 0.0482,
-          "p95_ms_mean": 387.2,
-          "probes_mean": 4.21
+          "accuracy_mean": 0.662,
+          "accuracy_std": 0.0345,
+          "p95_ms_mean": 351.0,
+          "probes_mean": 3.93
         },
         "0.2": {
-          "accuracy_mean": 0.617,
-          "accuracy_std": 0.0552,
-          "p95_ms_mean": 391.8,
-          "probes_mean": 4.27
+          "accuracy_mean": 0.6093,
+          "accuracy_std": 0.0228,
+          "p95_ms_mean": 367.3,
+          "probes_mean": 4.08
         },
         "0.3": {
-          "accuracy_mean": 0.6033,
-          "accuracy_std": 0.0453,
-          "p95_ms_mean": 389.8,
-          "probes_mean": 4.22
+          "accuracy_mean": 0.6183,
+          "accuracy_std": 0.0173,
+          "p95_ms_mean": 362.0,
+          "probes_mean": 3.97
         },
         "0.4": {
-          "accuracy_mean": 0.5227,
-          "accuracy_std": 0.0114,
-          "p95_ms_mean": 396.2,
+          "accuracy_mean": 0.468,
+          "accuracy_std": 0.0495,
+          "p95_ms_mean": 389.6,
           "probes_mean": 4.31
         }
       }
@@ -362,8 +362,8 @@
     "skill_liar": {
       "ppai": {
         "0.0": {
-          "accuracy_mean": 0.737,
-          "accuracy_std": 0.0137,
+          "accuracy_mean": 0.7353,
+          "accuracy_std": 0.0149,
           "p95_ms_mean": 158.8,
           "probes_mean": 1.0
         },
@@ -394,130 +394,130 @@
       },
       "majority": {
         "0.0": {
-          "accuracy_mean": 0.749,
-          "accuracy_std": 0.0171,
-          "p95_ms_mean": 242.7,
+          "accuracy_mean": 0.714,
+          "accuracy_std": 0.0207,
+          "p95_ms_mean": 245.6,
           "probes_mean": 5.0
         },
         "0.1": {
-          "accuracy_mean": 0.669,
-          "accuracy_std": 0.0096,
-          "p95_ms_mean": 279.0,
+          "accuracy_mean": 0.6483,
+          "accuracy_std": 0.0092,
+          "p95_ms_mean": 270.5,
           "probes_mean": 5.0
         },
         "0.2": {
-          "accuracy_mean": 0.474,
-          "accuracy_std": 0.0339,
-          "p95_ms_mean": 280.1,
+          "accuracy_mean": 0.454,
+          "accuracy_std": 0.0288,
+          "p95_ms_mean": 278.8,
           "probes_mean": 5.0
         },
         "0.3": {
-          "accuracy_mean": 0.298,
-          "accuracy_std": 0.0216,
-          "p95_ms_mean": 261.5,
+          "accuracy_mean": 0.2713,
+          "accuracy_std": 0.0302,
+          "p95_ms_mean": 255.9,
           "probes_mean": 5.0
         },
         "0.4": {
-          "accuracy_mean": 0.1857,
-          "accuracy_std": 0.0092,
-          "p95_ms_mean": 256.6,
+          "accuracy_mean": 0.198,
+          "accuracy_std": 0.0088,
+          "p95_ms_mean": 256.0,
           "probes_mean": 5.0
         }
       },
       "dawid_skene": {
         "0.0": {
-          "accuracy_mean": 0.745,
-          "accuracy_std": 0.0174,
-          "p95_ms_mean": 258.9,
+          "accuracy_mean": 0.7113,
+          "accuracy_std": 0.0064,
+          "p95_ms_mean": 249.3,
           "probes_mean": 5.0
         },
         "0.1": {
-          "accuracy_mean": 0.7157,
-          "accuracy_std": 0.0223,
-          "p95_ms_mean": 260.0,
+          "accuracy_mean": 0.7273,
+          "accuracy_std": 0.0118,
+          "p95_ms_mean": 255.2,
           "probes_mean": 5.0
         },
         "0.2": {
-          "accuracy_mean": 0.6537,
-          "accuracy_std": 0.0224,
-          "p95_ms_mean": 255.4,
+          "accuracy_mean": 0.6497,
+          "accuracy_std": 0.0136,
+          "p95_ms_mean": 263.1,
           "probes_mean": 5.0
         },
         "0.3": {
-          "accuracy_mean": 0.5847,
-          "accuracy_std": 0.0125,
-          "p95_ms_mean": 259.4,
+          "accuracy_mean": 0.5823,
+          "accuracy_std": 0.0241,
+          "p95_ms_mean": 258.6,
           "probes_mean": 5.0
         },
         "0.4": {
-          "accuracy_mean": 0.4947,
-          "accuracy_std": 0.0304,
-          "p95_ms_mean": 262.6,
+          "accuracy_mean": 0.4903,
+          "accuracy_std": 0.03,
+          "p95_ms_mean": 251.0,
           "probes_mean": 5.0
         }
       },
       "eigentrust": {
         "0.0": {
-          "accuracy_mean": 0.6507,
-          "accuracy_std": 0.0612,
-          "p95_ms_mean": 316.7,
+          "accuracy_mean": 0.6297,
+          "accuracy_std": 0.0618,
+          "p95_ms_mean": 311.7,
           "probes_mean": 5.0
         },
         "0.1": {
-          "accuracy_mean": 0.6277,
-          "accuracy_std": 0.0447,
-          "p95_ms_mean": 289.6,
+          "accuracy_mean": 0.6283,
+          "accuracy_std": 0.0421,
+          "p95_ms_mean": 297.4,
           "probes_mean": 5.0
         },
         "0.2": {
-          "accuracy_mean": 0.6633,
-          "accuracy_std": 0.0723,
-          "p95_ms_mean": 326.2,
+          "accuracy_mean": 0.6697,
+          "accuracy_std": 0.0179,
+          "p95_ms_mean": 331.8,
           "probes_mean": 5.0
         },
         "0.3": {
-          "accuracy_mean": 0.6463,
-          "accuracy_std": 0.0359,
-          "p95_ms_mean": 312.9,
+          "accuracy_mean": 0.666,
+          "accuracy_std": 0.0268,
+          "p95_ms_mean": 322.7,
           "probes_mean": 5.0
         },
         "0.4": {
-          "accuracy_mean": 0.6597,
-          "accuracy_std": 0.0247,
-          "p95_ms_mean": 335.5,
+          "accuracy_mean": 0.6587,
+          "accuracy_std": 0.0304,
+          "p95_ms_mean": 320.0,
           "probes_mean": 5.0
         }
       },
       "tada": {
         "0.0": {
-          "accuracy_mean": 0.7003,
-          "accuracy_std": 0.015,
-          "p95_ms_mean": 340.5,
-          "probes_mean": 3.8
+          "accuracy_mean": 0.6737,
+          "accuracy_std": 0.0364,
+          "p95_ms_mean": 350.3,
+          "probes_mean": 3.93
         },
         "0.1": {
-          "accuracy_mean": 0.6483,
-          "accuracy_std": 0.0429,
-          "p95_ms_mean": 379.0,
-          "probes_mean": 4.12
+          "accuracy_mean": 0.664,
+          "accuracy_std": 0.0271,
+          "p95_ms_mean": 370.6,
+          "probes_mean": 3.95
         },
         "0.2": {
-          "accuracy_mean": 0.6573,
-          "accuracy_std": 0.0302,
-          "p95_ms_mean": 381.4,
-          "probes_mean": 4.27
+          "accuracy_mean": 0.641,
+          "accuracy_std": 0.0406,
+          "p95_ms_mean": 369.6,
+          "probes_mean": 4.08
         },
         "0.3": {
-          "accuracy_mean": 0.6327,
-          "accuracy_std": 0.0147,
-          "p95_ms_mean": 368.7,
-          "probes_mean": 4.38
+          "accuracy_mean": 0.6363,
+          "accuracy_std": 0.0199,
+          "p95_ms_mean": 372.6,
+          "probes_mean": 4.12
         },
         "0.4": {
-          "accuracy_mean": 0.6193,
-          "accuracy_std": 0.0335,
-          "p95_ms_mean": 404.4,
-          "probes_mean": 4.39
+          "accuracy_mean": 0.6003,
+          "accuracy_std": 0.0342,
+          "p95_ms_mean": 396.0,
+          "probes_mean": 4.31
         }
       }
     }
