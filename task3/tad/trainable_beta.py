@@ -1,7 +1,3 @@
-# Copyright (C) 2026 Lenovo
-# All Rights Reserved.
-# Lenovo Confidential Restricted.
-
 """Trainable beta controller for trust-, confidence-, and availability-aware routing.
 
 In PPAI and baseline TADA, the congestion weight `beta` in
