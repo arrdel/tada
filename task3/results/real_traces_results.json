@@ -1,7 +1,7 @@
 {
-  "total_traces_collected": 49518,
+  "total_traces_collected": 81620,
   "common_questions_across_A1_A4": {
-    "MMLU": 2312,
+    "MMLU": 14042,
     "GSM8K": 1319,
     "MedQA": 1273,
     "ARC-C": 1147,
@@ -42,8 +42,8 @@
       "hf_id": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
       "clusters": {
         "MMLU": {
-          "n_traced": 2312,
-          "empirical_acc": 0.4775,
+          "n_traced": 14042,
+          "empirical_acc": 0.4218,
           "paper_table1_acc": 0.5443
         },
         "GSM8K": {
@@ -72,8 +72,8 @@
       "hf_id": "nvidia/OpenCodeReasoning-Nemotron-7B",
       "clusters": {
         "MMLU": {
-          "n_traced": 4824,
-          "empirical_acc": 0.482,
+          "n_traced": 14042,
+          "empirical_acc": 0.4521,
           "paper_table1_acc": 0.6302
         },
         "GSM8K": {
@@ -102,8 +102,8 @@
       "hf_id": "FreedomIntelligence/HuatuoGPT-o1-7B",
       "clusters": {
         "MMLU": {
-          "n_traced": 2888,
-          "empirical_acc": 0.6614,
+          "n_traced": 14042,
+          "empirical_acc": 0.6483,
           "paper_table1_acc": 0.7291
         },
         "GSM8K": {
@@ -161,11 +161,11 @@
   },
   "real_trace_ensemble_stats": {
     "MMLU": {
-      "n_common_questions": 2312,
+      "n_common_questions": 14042,
       "best_single_acc": 0.6968,
-      "majority_4agent_acc": 0.7262,
-      "oracle_union_acc": 0.8815,
-      "pairwise_wrong_agreement": 0.5786
+      "majority_4agent_acc": 0.7111,
+      "oracle_union_acc": 0.877,
+      "pairwise_wrong_agreement": 0.5783
     },
     "GSM8K": {
       "n_common_questions": 1319,
@@ -191,332 +191,332 @@
     "AGIEval": {
       "n_common_questions": 2624,
       "best_single_acc": 0.5938,
-      "majority_4agent_acc": 0.5877,
+      "majority_4agent_acc": 0.5873,
       "oracle_union_acc": 0.7824,
-      "pairwise_wrong_agreement": 0.6269
+      "pairwise_wrong_agreement": 0.6276
     }
   },
   "simulator_with_real_traces": {
     "collude": {
       "ppai": {
         "0.0": {
-          "accuracy_mean": 0.7393,
-          "accuracy_std": 0.015,
-          "p95_ms_mean": 60.1,
+          "accuracy_mean": 0.737,
+          "accuracy_std": 0.0137,
+          "p95_ms_mean": 158.8,
           "probes_mean": 1.0
         },
         "0.1": {
-          "accuracy_mean": 0.0517,
-          "accuracy_std": 0.0161,
-          "p95_ms_mean": 63.1,
+          "accuracy_mean": 0.0557,
+          "accuracy_std": 0.0179,
+          "p95_ms_mean": 165.3,
           "probes_mean": 1.0
         },
         "0.2": {
           "accuracy_mean": 0.0,
           "accuracy_std": 0.0,
-          "p95_ms_mean": 61.9,
+          "p95_ms_mean": 167.1,
           "probes_mean": 1.0
         },
         "0.3": {
           "accuracy_mean": 0.0,
           "accuracy_std": 0.0,
-          "p95_ms_mean": 59.7,
+          "p95_ms_mean": 159.8,
           "probes_mean": 1.0
         },
         "0.4": {
           "accuracy_mean": 0.0,
           "accuracy_std": 0.0,
-          "p95_ms_mean": 60.8,
+          "p95_ms_mean": 161.0,
           "probes_mean": 1.0
         }
       },
       "majority": {
         "0.0": {
-          "accuracy_mean": 0.7423,
-          "accuracy_std": 0.0183,
-          "p95_ms_mean": 124.6,
+          "accuracy_mean": 0.749,
+          "accuracy_std": 0.0171,
+          "p95_ms_mean": 242.7,
           "probes_mean": 5.0
         },
         "0.1": {
-          "accuracy_mean": 0.5547,
-          "accuracy_std": 0.0138,
-          "p95_ms_mean": 142.2,
+          "accuracy_mean": 0.552,
+          "accuracy_std": 0.0212,
+          "p95_ms_mean": 277.7,
           "probes_mean": 5.0
         },
         "0.2": {
-          "accuracy_mean": 0.3197,
-          "accuracy_std": 0.0255,
-          "p95_ms_mean": 145.5,
+          "accuracy_mean": 0.2997,
+          "accuracy_std": 0.0223,
+          "p95_ms_mean": 281.8,
           "probes_mean": 5.0
         },
         "0.3": {
-          "accuracy_mean": 0.1553,
-          "accuracy_std": 0.0085,
-          "p95_ms_mean": 134.4,
+          "accuracy_mean": 0.138,
+          "accuracy_std": 0.0053,
+          "p95_ms_mean": 268.1,
           "probes_mean": 5.0
         },
         "0.4": {
-          "accuracy_mean": 0.064,
-          "accuracy_std": 0.0146,
-          "p95_ms_mean": 131.7,
+          "accuracy_mean": 0.0673,
+          "accuracy_std": 0.0128,
+          "p95_ms_mean": 252.4,
           "probes_mean": 5.0
         }
       },
       "dawid_skene": {
         "0.0": {
-          "accuracy_mean": 0.7473,
-          "accuracy_std": 0.0168,
-          "p95_ms_mean": 133.6,
+          "accuracy_mean": 0.745,
+          "accuracy_std": 0.0174,
+          "p95_ms_mean": 258.9,
           "probes_mean": 5.0
         },
         "0.1": {
-          "accuracy_mean": 0.6903,
-          "accuracy_std": 0.0189,
-          "p95_ms_mean": 135.8,
+          "accuracy_mean": 0.6623,
+          "accuracy_std": 0.0244,
+          "p95_ms_mean": 267.0,
           "probes_mean": 5.0
         },
         "0.2": {
-          "accuracy_mean": 0.3547,
-          "accuracy_std": 0.0407,
-          "p95_ms_mean": 143.6,
+          "accuracy_mean": 0.326,
+          "accuracy_std": 0.0759,
+          "p95_ms_mean": 293.9,
           "probes_mean": 5.0
         },
         "0.3": {
-          "accuracy_mean": 0.101,
-          "accuracy_std": 0.0221,
-          "p95_ms_mean": 140.6,
+          "accuracy_mean": 0.1053,
+          "accuracy_std": 0.0255,
+          "p95_ms_mean": 278.9,
           "probes_mean": 5.0
         },
         "0.4": {
-          "accuracy_mean": 0.0403,
-          "accuracy_std": 0.0107,
-          "p95_ms_mean": 138.6,
+          "accuracy_mean": 0.0343,
+          "accuracy_std": 0.009,
+          "p95_ms_mean": 274.4,
           "probes_mean": 5.0
         }
       },
       "eigentrust": {
         "0.0": {
-          "accuracy_mean": 0.67,
-          "accuracy_std": 0.0512,
-          "p95_ms_mean": 160.5,
+          "accuracy_mean": 0.6507,
+          "accuracy_std": 0.0612,
+          "p95_ms_mean": 316.7,
           "probes_mean": 5.0
         },
         "0.1": {
-          "accuracy_mean": 0.6287,
-          "accuracy_std": 0.049,
-          "p95_ms_mean": 151.3,
+          "accuracy_mean": 0.611,
+          "accuracy_std": 0.0374,
+          "p95_ms_mean": 291.0,
           "probes_mean": 5.0
         },
         "0.2": {
-          "accuracy_mean": 0.63,
-          "accuracy_std": 0.0744,
-          "p95_ms_mean": 158.7,
+          "accuracy_mean": 0.6453,
+          "accuracy_std": 0.06,
+          "p95_ms_mean": 320.7,
           "probes_mean": 5.0
         },
         "0.3": {
-          "accuracy_mean": 0.6497,
-          "accuracy_std": 0.0211,
-          "p95_ms_mean": 166.4,
+          "accuracy_mean": 0.644,
+          "accuracy_std": 0.0375,
+          "p95_ms_mean": 315.4,
           "probes_mean": 5.0
         },
         "0.4": {
-          "accuracy_mean": 0.6427,
-          "accuracy_std": 0.0401,
-          "p95_ms_mean": 170.1,
+          "accuracy_mean": 0.613,
+          "accuracy_std": 0.0206,
+          "p95_ms_mean": 319.2,
           "probes_mean": 5.0
         }
       },
       "tada": {
         "0.0": {
-          "accuracy_mean": 0.69,
-          "accuracy_std": 0.0154,
-          "p95_ms_mean": 155.6,
-          "probes_mean": 3.87
+          "accuracy_mean": 0.7003,
+          "accuracy_std": 0.015,
+          "p95_ms_mean": 340.5,
+          "probes_mean": 3.8
         },
         "0.1": {
-          "accuracy_mean": 0.6583,
-          "accuracy_std": 0.0456,
-          "p95_ms_mean": 161.8,
-          "probes_mean": 3.97
+          "accuracy_mean": 0.6417,
+          "accuracy_std": 0.0482,
+          "p95_ms_mean": 387.2,
+          "probes_mean": 4.21
         },
         "0.2": {
-          "accuracy_mean": 0.6353,
-          "accuracy_std": 0.0518,
-          "p95_ms_mean": 167.3,
-          "probes_mean": 4.06
+          "accuracy_mean": 0.617,
+          "accuracy_std": 0.0552,
+          "p95_ms_mean": 391.8,
+          "probes_mean": 4.27
         },
         "0.3": {
-          "accuracy_mean": 0.6207,
-          "accuracy_std": 0.0367,
-          "p95_ms_mean": 174.8,
-          "probes_mean": 4.13
+          "accuracy_mean": 0.6033,
+          "accuracy_std": 0.0453,
+          "p95_ms_mean": 389.8,
+          "probes_mean": 4.22
         },
         "0.4": {
-          "accuracy_mean": 0.4953,
-          "accuracy_std": 0.0331,
-          "p95_ms_mean": 180.6,
-          "probes_mean": 4.26
+          "accuracy_mean": 0.5227,
+          "accuracy_std": 0.0114,
+          "p95_ms_mean": 396.2,
+          "probes_mean": 4.31
         }
       }
     },
     "skill_liar": {
       "ppai": {
         "0.0": {
-          "accuracy_mean": 0.7393,
-          "accuracy_std": 0.015,
-          "p95_ms_mean": 60.1,
+          "accuracy_mean": 0.737,
+          "accuracy_std": 0.0137,
+          "p95_ms_mean": 158.8,
           "probes_mean": 1.0
         },
         "0.1": {
-          "accuracy_mean": 0.193,
-          "accuracy_std": 0.0192,
-          "p95_ms_mean": 62.3,
+          "accuracy_mean": 0.1953,
+          "accuracy_std": 0.0188,
+          "p95_ms_mean": 170.9,
           "probes_mean": 1.0
         },
         "0.2": {
           "accuracy_mean": 0.1553,
           "accuracy_std": 0.0108,
-          "p95_ms_mean": 61.8,
+          "p95_ms_mean": 170.0,
           "probes_mean": 1.0
         },
         "0.3": {
           "accuracy_mean": 0.1603,
           "accuracy_std": 0.0129,
-          "p95_ms_mean": 60.6,
+          "p95_ms_mean": 169.7,
           "probes_mean": 1.0
         },
         "0.4": {
           "accuracy_mean": 0.1657,
           "accuracy_std": 0.0187,
-          "p95_ms_mean": 61.5,
+          "p95_ms_mean": 161.8,
           "probes_mean": 1.0
         }
       },
       "majority": {
         "0.0": {
-          "accuracy_mean": 0.7423,
-          "accuracy_std": 0.0183,
-          "p95_ms_mean": 124.6,
+          "accuracy_mean": 0.749,
+          "accuracy_std": 0.0171,
+          "p95_ms_mean": 242.7,
           "probes_mean": 5.0
         },
         "0.1": {
-          "accuracy_mean": 0.6597,
-          "accuracy_std": 0.0177,
-          "p95_ms_mean": 142.6,
+          "accuracy_mean": 0.669,
+          "accuracy_std": 0.0096,
+          "p95_ms_mean": 279.0,
           "probes_mean": 5.0
         },
         "0.2": {
-          "accuracy_mean": 0.4703,
-          "accuracy_std": 0.0185,
-          "p95_ms_mean": 143.6,
+          "accuracy_mean": 0.474,
+          "accuracy_std": 0.0339,
+          "p95_ms_mean": 280.1,
           "probes_mean": 5.0
         },
         "0.3": {
-          "accuracy_mean": 0.2657,
-          "accuracy_std": 0.0123,
-          "p95_ms_mean": 135.6,
+          "accuracy_mean": 0.298,
+          "accuracy_std": 0.0216,
+          "p95_ms_mean": 261.5,
           "probes_mean": 5.0
         },
         "0.4": {
-          "accuracy_mean": 0.1823,
-          "accuracy_std": 0.0091,
-          "p95_ms_mean": 132.1,
+          "accuracy_mean": 0.1857,
+          "accuracy_std": 0.0092,
+          "p95_ms_mean": 256.6,
           "probes_mean": 5.0
         }
       },
       "dawid_skene": {
         "0.0": {
-          "accuracy_mean": 0.7473,
-          "accuracy_std": 0.0168,
-          "p95_ms_mean": 133.6,
+          "accuracy_mean": 0.745,
+          "accuracy_std": 0.0174,
+          "p95_ms_mean": 258.9,
           "probes_mean": 5.0
         },
         "0.1": {
-          "accuracy_mean": 0.7153,
-          "accuracy_std": 0.008,
-          "p95_ms_mean": 135.8,
+          "accuracy_mean": 0.7157,
+          "accuracy_std": 0.0223,
+          "p95_ms_mean": 260.0,
           "probes_mean": 5.0
         },
         "0.2": {
-          "accuracy_mean": 0.666,
-          "accuracy_std": 0.0198,
-          "p95_ms_mean": 134.2,
+          "accuracy_mean": 0.6537,
+          "accuracy_std": 0.0224,
+          "p95_ms_mean": 255.4,
           "probes_mean": 5.0
         },
         "0.3": {
-          "accuracy_mean": 0.584,
-          "accuracy_std": 0.0164,
-          "p95_ms_mean": 129.8,
+          "accuracy_mean": 0.5847,
+          "accuracy_std": 0.0125,
+          "p95_ms_mean": 259.4,
           "probes_mean": 5.0
         },
         "0.4": {
-          "accuracy_mean": 0.482,
-          "accuracy_std": 0.0388,
-          "p95_ms_mean": 130.1,
+          "accuracy_mean": 0.4947,
+          "accuracy_std": 0.0304,
+          "p95_ms_mean": 262.6,
           "probes_mean": 5.0
         }
       },
       "eigentrust": {
         "0.0": {
-          "accuracy_mean": 0.67,
-          "accuracy_std": 0.0512,
-          "p95_ms_mean": 160.5,
+          "accuracy_mean": 0.6507,
+          "accuracy_std": 0.0612,
+          "p95_ms_mean": 316.7,
           "probes_mean": 5.0
         },
         "0.1": {
-          "accuracy_mean": 0.6173,
-          "accuracy_std": 0.051,
-          "p95_ms_mean": 152.1,
+          "accuracy_mean": 0.6277,
+          "accuracy_std": 0.0447,
+          "p95_ms_mean": 289.6,
           "probes_mean": 5.0
         },
         "0.2": {
-          "accuracy_mean": 0.6803,
-          "accuracy_std": 0.0468,
-          "p95_ms_mean": 161.3,
+          "accuracy_mean": 0.6633,
+          "accuracy_std": 0.0723,
+          "p95_ms_mean": 326.2,
           "probes_mean": 5.0
         },
         "0.3": {
-          "accuracy_mean": 0.6563,
-          "accuracy_std": 0.0357,
-          "p95_ms_mean": 164.8,
+          "accuracy_mean": 0.6463,
+          "accuracy_std": 0.0359,
+          "p95_ms_mean": 312.9,
           "probes_mean": 5.0
         },
         "0.4": {
-          "accuracy_mean": 0.6573,
-          "accuracy_std": 0.0354,
-          "p95_ms_mean": 170.0,
+          "accuracy_mean": 0.6597,
+          "accuracy_std": 0.0247,
+          "p95_ms_mean": 335.5,
           "probes_mean": 5.0
         }
       },
       "tada": {
         "0.0": {
-          "accuracy_mean": 0.69,
-          "accuracy_std": 0.0154,
-          "p95_ms_mean": 155.6,
-          "probes_mean": 3.87
+          "accuracy_mean": 0.7003,
+          "accuracy_std": 0.015,
+          "p95_ms_mean": 340.5,
+          "probes_mean": 3.8
         },
         "0.1": {
-          "accuracy_mean": 0.6803,
-          "accuracy_std": 0.019,
-          "p95_ms_mean": 166.6,
-          "probes_mean": 4.07
+          "accuracy_mean": 0.6483,
+          "accuracy_std": 0.0429,
+          "p95_ms_mean": 379.0,
+          "probes_mean": 4.12
         },
         "0.2": {
-          "accuracy_mean": 0.662,
-          "accuracy_std": 0.0269,
-          "p95_ms_mean": 175.3,
-          "probes_mean": 4.16
+          "accuracy_mean": 0.6573,
+          "accuracy_std": 0.0302,
+          "p95_ms_mean": 381.4,
+          "probes_mean": 4.27
         },
         "0.3": {
-          "accuracy_mean": 0.6347,
-          "accuracy_std": 0.0629,
-          "p95_ms_mean": 175.6,
-          "probes_mean": 4.16
+          "accuracy_mean": 0.6327,
+          "accuracy_std": 0.0147,
+          "p95_ms_mean": 368.7,
+          "probes_mean": 4.38
         },
         "0.4": {
-          "accuracy_mean": 0.6153,
-          "accuracy_std": 0.0443,
-          "p95_ms_mean": 188.3,
+          "accuracy_mean": 0.6193,
+          "accuracy_std": 0.0335,
+          "p95_ms_mean": 404.4,
           "probes_mean": 4.39
         }
       }

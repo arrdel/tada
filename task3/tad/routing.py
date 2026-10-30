@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .peers import CORRECT
+from .trainable_beta import TrainableBetaController, extract_beta_features
 
 
 @dataclass
@@ -18,6 +19,7 @@ class Outcome:
     probes: int
     audits: int = 0
     answerers: list = field(default_factory=list)
+    beta_used: float = 0.0
 
 
 class Policy:
@@ -102,6 +104,16 @@ class TADA(Policy):
                      len(self.LOAD_BINS) + 1, provider.K, 2)
             self.Q = (np.array(cfg.rl_q, dtype=float).copy() if cfg.rl_q is not None
                       else np.zeros(shape))
+        self.beta_ctrl = None
+        if getattr(cfg, "beta_trainable", False):
+            self.beta_ctrl = TrainableBetaController(
+                beta_min=getattr(cfg, "beta_min", 0.2),
+                beta_max=getattr(cfg, "beta_max", 12.0),
+                init_beta=cfg.beta,
+                lr=getattr(cfg, "beta_lr", 0.04),
+                train=getattr(cfg, "beta_train", False),
+                weights=getattr(cfg, "beta_weights", None),
+            )
 
     def _state(self, conf, rnd, load, k):
         return (int(np.searchsorted(self.CONF_BINS, conf)), min(rnd, self.MAX_ROUNDS - 1),
@@ -119,10 +131,12 @@ class TADA(Policy):
         return a == 1
 
     def on_finish(self, out, correct, latency):
-        if self.Q is None or not self.cfg.rl_train:
-            return
         g = (float(correct) - self.cfg.probe_cost * out.probes
              - self.cfg.latency_cost * latency)
+        if self.beta_ctrl is not None and self.beta_ctrl.train:
+            self.beta_ctrl.update(getattr(out, "beta_step", None), g)
+        if self.Q is None or not self.cfg.rl_train:
+            return
         for s, a in out.traj:
             self.Q[s + (a,)] += self.cfg.rl_lr * (g - self.Q[s + (a,)])
 
@@ -132,11 +146,37 @@ class TADA(Policy):
         shortlist = np.flatnonzero(rel >= cfg.theta_s)
         if len(shortlist) == 0:
             shortlist = np.arange(sim.fleet.n)
-        score = prov.acc_vec(k)[shortlist] - cfg.beta * sim.load()[shortlist]
+
+        trust_s = prov.acc_vec(k)[shortlist]
+        load_s = sim.load()[shortlist]
+        avail_s = prov.avail_vec()[shortlist] if getattr(cfg, "use_availability", False) else np.ones(len(shortlist))
+        conf_s = prov.conf_vec(k)[shortlist] if getattr(cfg, "use_confidence", False) else np.full(len(shortlist), 0.75)
+
+        beta_step = None
+        if self.beta_ctrl is not None:
+            phi = extract_beta_features(trust_s, load_s, avail_s, conf_s, k, prov.K)
+            beta_val, beta_step = self.beta_ctrl.select_beta(phi, sim.rng)
+        else:
+            beta_val = float(cfg.beta)
+
+        # Unified Trust + Confidence + Availability + Trainable-Beta scoring
+        eff_skill = trust_s.copy()
+        if getattr(cfg, "use_confidence", False):
+            cw = getattr(cfg, "conf_weight", 0.45)
+            eff_skill = eff_skill * ((1.0 - 0.5 * cw) + 0.5 * cw * (conf_s / 0.75))
+        if getattr(cfg, "use_availability", False):
+            eff_skill = eff_skill * np.clip(avail_s, 0.1, 1.0)
+            eff_load = load_s / np.clip(avail_s, 0.2, 1.0)
+        else:
+            eff_load = load_s
+
+        score = eff_skill - beta_val * eff_load
         order = shortlist[np.argsort(-score)]
 
-        used, labels, pos, rnd, traj = [], [], 0, 0, []
+        used, labels, confs, pos, rnd, traj = [], [], [], 0, 0, []
         load_now = float(np.mean(sim.load()[order[:cfg.first_round]]))
+        use_conf = getattr(cfg, "use_confidence", False)
+        cw = getattr(cfg, "conf_weight", 0.45) if use_conf else 0.0
         while True:
             if not cfg.sequential:
                 size = cfg.m_max
@@ -144,9 +184,20 @@ class TADA(Policy):
                 size = cfg.first_round if not used else cfg.round_size
             batch = [int(p) for p in order[pos:pos + size]]
             pos += len(batch)
-            labels += (yield batch)
+            batch_labels = yield batch
+            labels += batch_labels
             used += batch
-            answer, conf = prov.aggregate(k, used, labels, sim.rng)
+            for p in batch:
+                c_p = float(sim.last_conf[p])
+                a_p = bool(sim.last_avail[p])
+                confs.append(c_p)
+                prov.record_confidence(p, k, c_p)
+                prov.record_availability(p, a_p)
+            answer, conf = prov.aggregate(
+                k, used, labels, sim.rng,
+                confidences=confs if use_conf else None,
+                conf_weight=cw,
+            )
             if len(used) >= cfg.m_max or pos >= len(order):
                 break
             if not self._escalate(conf, rnd, load_now, k, sim, traj):
@@ -174,6 +225,7 @@ class TADA(Policy):
                      lambda lab, t=target: prov.audit(t, k, lab == CORRECT))
             audits = 1
 
-        out = Outcome(answer, len(used) + audits, audits, used)
+        out = Outcome(answer, len(used) + audits, audits, used, beta_used=beta_val)
         out.traj = traj
+        out.beta_step = beta_step
         return out

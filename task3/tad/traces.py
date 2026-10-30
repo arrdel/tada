@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 
 import numpy as np
 
@@ -21,6 +22,30 @@ from . import profiles
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TRACES = ROOT / "data" / "traces"
 
+_EXPLICIT_ANS_RE = re.compile(
+    r"(?:answer|choice|option)\s*(?:is|:)\s*\(?[A-Da-d]\b|####\s*-?[\d,]+",
+    re.I,
+)
+_HEDGE_RE = re.compile(r"\b(?:not sure|unsure|maybe|guess|Wait,|Hmm)\b", re.I)
+
+
+def extract_trace_confidence(row: dict) -> float:
+    """Derive a per-response self-confidence in [0.15, 0.96] from raw output.
+
+    Reasoning models (DeepSeek-R1-Distill, Nemotron) that finish their thought
+    and emit an explicit 'Answer: X' / '#### N' marker are empirically ~2x more
+    accurate than truncated chains of thought that never reach a final marker.
+    """
+    if row.get("choice") is None:
+        return 0.15
+    raw = row.get("raw") or ""
+    if _EXPLICIT_ANS_RE.search(raw):
+        n_hedge = len(_HEDGE_RE.findall(raw))
+        return float(max(0.72, 0.94 - 0.04 * min(n_hedge, 4)))
+    if "</think>" in raw.lower():
+        return 0.65
+    return 0.35
+
 
 class TraceBank:
     def __init__(self, root: Path | str = DEFAULT_TRACES):
@@ -28,6 +53,7 @@ class TraceBank:
         # choices[agent][cluster][qid] = int
         self.choices: dict[str, list[dict[str, int]]] = {}
         self.corrects: dict[str, list[dict[str, bool]]] = {}
+        self.confidences: dict[str, list[dict[str, float]]] = {}
         self.qids: list[list[str]] = [[] for _ in profiles.CLUSTERS]
         self.common_qids: list[list[str]] = [[] for _ in profiles.CLUSTERS]
         self._load()
@@ -43,6 +69,7 @@ class TraceBank:
                 continue
             self.choices[agent] = [{} for _ in profiles.CLUSTERS]
             self.corrects[agent] = [{} for _ in profiles.CLUSTERS]
+            self.confidences[agent] = [{} for _ in profiles.CLUSTERS]
             for k, cluster in enumerate(profiles.CLUSTERS):
                 path = agent_dir / f"{cluster}.jsonl"
                 if not path.exists():
@@ -74,6 +101,7 @@ class TraceBank:
                                 sim_choice = 1 + (hash((agent, qid)) % (profiles.N_OPTIONS - 1))
                         self.choices[agent][k][qid] = int(sim_choice)
                         self.corrects[agent][k][qid] = correct
+                        self.confidences[agent][k][qid] = extract_trace_confidence(row)
                         qset.add(qid)
                         if qid not in qids_seen[k]:
                             qids_seen[k].add(qid)
@@ -115,6 +143,9 @@ class TraceBank:
 
     def choice(self, agent: str, k: int, qid: str) -> int | None:
         return self.choices.get(agent, [{}] * profiles.N_CLUSTERS)[k].get(qid)
+
+    def confidence(self, agent: str, k: int, qid: str) -> float:
+        return float(self.confidences.get(agent, [{}] * profiles.N_CLUSTERS)[k].get(qid, 0.7))
 
     def has(self, agent: str, k: int, qid: str) -> bool:
         return qid in self.choices.get(agent, [{}] * profiles.N_CLUSTERS)[k]

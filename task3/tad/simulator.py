@@ -62,6 +62,19 @@ class Config:
     # real-answer traces (from `python -m collect.collect_answers`)
     use_traces: bool = False
     traces_root: object = None    # Path or None → data/traces
+    # Trust + Agent Confidence + Peer Availability + Trainable Beta
+    use_confidence: bool = False
+    conf_weight: float = 0.45
+    use_availability: bool = False
+    min_availability: float = 1.0
+    unreliable_fraction: float = 0.0
+    dropout_penalty_s: float = 0.08
+    beta_trainable: bool = False
+    beta_train: bool = False
+    beta_weights: object = None
+    beta_min: float = 0.2
+    beta_max: float = 12.0
+    beta_lr: float = 0.04
     seed: int = 0
 
 
@@ -84,12 +97,16 @@ class Sim:
                            if cfg.traces_root is not None else get_bank())
         self.fleet = peers_mod.build_fleet(
             cfg.n_peers, cfg.adversary_fraction, cfg.adversary_type, self.rng,
-            camouflage=cfg.camouflage, traces=self.traces)
+            camouflage=cfg.camouflage, traces=self.traces,
+            min_availability=cfg.min_availability,
+            unreliable_fraction=cfg.unreliable_fraction)
         self.policy = make_policy(cfg, self.fleet)
         n = cfg.n_peers
         self.queues = [deque() for _ in range(n)]
         self.busy = np.zeros(n, dtype=bool)
         self.inflight = np.zeros(n)      # jobs sent to a peer and not yet served
+        self.last_conf = np.full(n, 0.75, dtype=float)
+        self.last_avail = np.ones(n, dtype=bool)
         self.now = 0.0
         self._heap, self._seq = [], 0
         self._canary_qid = 0
@@ -127,14 +144,27 @@ class Sim:
     def _start(self, pid):
         job = self.queues[pid].popleft()
         self.busy[pid] = True
-        self._push(self.now + self.rng.exponential(1.0 / self.fleet.mu[pid]),
-                   self._peer_done, job)
+        avail = self.fleet.is_available(pid)
+        svc = self.rng.exponential(1.0 / self.fleet.mu[pid])
+        if not avail:
+            svc += self.cfg.dropout_penalty_s
+        self._push(self.now + svc, self._peer_done, job + (avail,))
 
     def _peer_done(self, job):
-        pid, k, qid, net, on_reply = job
+        pid, k, qid, net, on_reply, avail = job
         self.busy[pid] = False
         self.inflight[pid] -= 1
-        answer = self.fleet.answer(pid, k, qid)
+        self.last_avail[pid] = bool(avail)
+        if self.cfg.use_confidence or not avail:
+            answer, conf = self.fleet.answer_with_confidence(pid, k, qid)
+            if not avail:
+                # Transient dropout/timeout: low confidence and degraded fallback
+                conf = 0.15
+                if self.rng.random() < 0.5:
+                    answer = int(self.rng.integers(1, profiles.N_OPTIONS))
+            self.last_conf[pid] = float(conf)
+        else:
+            answer = self.fleet.answer(pid, k, qid)
         self._push(self.now + net, lambda _: on_reply(answer), None)
         if self.queues[pid]:
             self._start(pid)
@@ -219,6 +249,12 @@ class Sim:
         out["policy_name"] = self.policy.name
         if getattr(self.policy, "Q", None) is not None:
             out["rl_q"] = self.policy.Q
+        if getattr(self.policy, "beta_ctrl", None) is not None:
+            ctrl = self.policy.beta_ctrl
+            out["beta_weights"] = ctrl.export_weights()
+            out["mean_beta"] = float(np.mean(ctrl.history_beta)) if ctrl.history_beta else float(self.cfg.beta)
+        else:
+            out["mean_beta"] = float(self.cfg.beta)
         out["config"] = dict(self.cfg.__dict__)
         return out
 
