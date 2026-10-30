@@ -27,10 +27,10 @@ AGENTS = {
         "notes": "medical; Qwen2.5-7B backbone",
     },
     "A5_llama": {
-        "hf_id": "meta-llama/Meta-Llama-3-8B-Instruct",
+        "hf_id": "NousResearch/Meta-Llama-3-8B-Instruct",
         "label": "Meta-Llama-3-8B-Instruct",
-        "gated": True,
-        "notes": "needs `huggingface-cli login` (Meta Llama licence)",
+        "gated": False,
+        "notes": "open mirror of meta-llama/Meta-Llama-3-8B-Instruct",
     },
 }
 
