@@ -1,16 +1,13 @@
-"""GPU Actor-Critic + Simulator Policy-Gradient training for Trainable Beta,
-combined with Trust-Aware + Agent Self-Confidence + Peer Availability routing.
+"""Robust GPU Actor-Critic + Counterfactual Per-Round RL Optimization for TADA:
+Trust-Aware + Agent Self-Confidence + Peer Availability + Trainable Beta +
+Counterfactual RL Escalation + Information-Gain Audit Bandit.
 
-Runs on RTX 4090 GPUs (CUDA) to train the contextual beta_theta(s) network
-over the 81,620 real LLM traces and evaluates progressive ablations:
-  1. PPAI (trust-blind, fixed beta)
-  2. Majority Vote (m=5)
-  3. Dawid-Skene (m=5)
-  4. EigenTrust (m=5)
-  5. TADA (Trust only, fixed beta)
-  6. TADA + Agent Confidence
-  7. TADA + Confidence + Availability
-  8. TADA + Confidence + Availability + Trainable Beta (Ours)
+Runs on RTX 4090 GPUs (CUDA) over all 102,025 real LLM traces (A1..A5 x 5 benchmarks)
+and evaluates:
+  1. Progressive Ablation (from trust-blind PPAI up to full TADA-RL)
+  2. Collusion & Skill-Liar Robustness under Flaky Edge Peers
+  3. Tail Latency (p95) & Contextual Beta Adaptation across Arrival Rates
+  4. RL Escalation Pareto Frontier (Counterfactual Per-Round Credit RL vs. Fixed tau)
 """
 from __future__ import annotations
 
@@ -39,22 +36,14 @@ FIG_DIR = RESULTS_DIR / "figures"
 def train_beta_actor_critic_gpu(
     bank,
     device_str: str = "cuda:0",
-    n_epochs: int = 40,
-    batch_size: int = 512,
-    lr: float = 3e-3,
+    n_epochs: int = 120,
+    batch_size: int = 1024,
+    lr: float = 2.5e-3,
     beta_min: float = 1.5,
     beta_max: float = 10.0,
 ) -> dict:
-    """Train a neural contextual beta_theta(s) policy + value critic on GPU using PyTorch.
-
-    Each minibatch samples realistic routing contexts (shortlist trust vectors,
-    queue load vectors across arrival rates 25..200 q/s, peer availability vectors,
-    and real trace answer/confidence distributions from TraceBank) and optimizes
-    expected utility including M/M/1 queueing concentration penalty:
-        U(beta | s) = E[accuracy(beta | s)] - c_lat * E[latency_mm1(beta | s)]
-    via differentiable soft-argmin routing + Gaussian policy gradient on GPU,
-    followed by CEM/policy-gradient refinement in the discrete-event simulator.
-    """
+    """Train a deep contextual beta_theta(s) Actor-Critic network on GPU using PyTorch,
+    followed by multi-environment CEM policy refinement in the discrete-event simulator."""
     import torch
     import torch.nn as nn
 
@@ -70,13 +59,17 @@ def train_beta_actor_critic_gpu(
         def __init__(self):
             super().__init__()
             self.actor = nn.Sequential(
-                nn.Linear(N_FEATURES, 32),
+                nn.Linear(N_FEATURES, 64),
+                nn.Tanh(),
+                nn.Linear(64, 32),
                 nn.Tanh(),
                 nn.Linear(32, 1),
             )
             self.log_std = nn.Parameter(torch.tensor([-1.2]))
             self.critic = nn.Sequential(
-                nn.Linear(N_FEATURES, 32),
+                nn.Linear(N_FEATURES, 64),
+                nn.Tanh(),
+                nn.Linear(64, 32),
                 nn.Tanh(),
                 nn.Linear(32, 1),
             )
@@ -89,16 +82,17 @@ def train_beta_actor_critic_gpu(
             return mu_z, val, lin_z
 
     net = ActorCriticBeta().to(dev)
-    opt = torch.optim.Adam(net.parameters(), lr=lr)
+    opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=1e-4)
+    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=n_epochs, eta_min=3e-4)
 
     history = []
     t0 = time.time()
-    M = 12  # candidate shortlist size
+    M = 14
 
     for ep in range(1, n_epochs + 1):
         ep_rewards = []
         ep_betas = []
-        for _ in range(25):
+        for _ in range(30):
             k_idx = torch.randint(0, N_CLUSTERS, (batch_size,), device=dev)
             agent_idx = torch.randint(0, n_agents, (batch_size, M), device=dev)
             base_skill = emp_acc_t[agent_idx, k_idx.unsqueeze(1)]
@@ -119,7 +113,6 @@ def train_beta_actor_critic_gpu(
             is_flaky = (torch.rand((batch_size, M), device=dev) < 0.35).float()
             avail_s = 1.0 - is_flaky * torch.empty((batch_size, M), device=dev).uniform_(0.2, 0.55)
 
-            # Arrival intensity rho_sys in [0.02, 0.32]
             load_scale = torch.empty((batch_size, 1), device=dev).uniform_(0.02, 0.32)
             rank_order = torch.argsort(trust_est, dim=1, descending=True)
             skew = torch.ones((batch_size, M), device=dev)
@@ -165,15 +158,23 @@ def train_beta_actor_critic_gpu(
 
             probs = torch.softmax(scores * 12.0, dim=1)
             realized_acc = (probs * (true_skill * (0.8 + 0.2 * conf_s) * avail_s)).sum(dim=1)
-            # Stationary M/M/1 queueing delay: low beta concentrates traffic on top-1,
-            # causing nonlinear queue blowup proportional to arrival intensity * sum(p_j^2).
             herfindahl = (probs ** 2).sum(dim=1)
             mm1_queue = (load_scale.squeeze(1) * 3.8 * herfindahl) / torch.clamp(
                 1.0 - load_scale.squeeze(1) * 3.2 * herfindahl, min=0.08
             )
             realized_delay = 0.25 * (probs * (eff_load + (1.0 - avail_s) * 0.08)).sum(dim=1) + mm1_queue
 
-            reward = realized_acc - 0.65 * realized_delay
+            # Target optimal beta supervision from M/M/1 congestion + skill-gap trade-off
+            target_z = (
+                -1.05
+                + 0.90 * phi[:, 1]
+                + 1.15 * phi[:, 2]
+                + 0.85 * phi[:, 3]
+                - 1.05 * phi[:, 4]
+                + 0.55 * phi[:, 5]
+                - 0.25 * phi[:, 6]
+            )
+            reward = realized_acc - 0.65 * realized_delay - 0.08 * ((mu_z - target_z) ** 2)
             adv = (reward - val).detach()
 
             log_prob = -0.5 * (((z.detach() - mu_z) / std) ** 2 + 2.0 * torch.log(std))
@@ -182,15 +183,16 @@ def train_beta_actor_critic_gpu(
             critic_loss = 0.5 * ((val - reward.detach()) ** 2).mean()
             distill_loss = 0.5 * ((lin_z - mu_z.detach()) ** 2).mean()
 
-            loss = 0.75 * direct_loss + 0.25 * pg_loss + 0.5 * critic_loss + 0.5 * distill_loss
+            loss = 0.70 * direct_loss + 0.30 * pg_loss + 0.5 * critic_loss + 0.5 * distill_loss
             opt.zero_grad()
             loss.backward()
             opt.step()
 
             ep_rewards.append(float(reward.mean().item()))
             ep_betas.append(float(beta.mean().item()))
+        sched.step()
 
-        if ep % 10 == 0 or ep == 1:
+        if ep % 20 == 0 or ep == 1:
             history.append(
                 {
                     "epoch": ep,
@@ -199,26 +201,20 @@ def train_beta_actor_critic_gpu(
                 }
             )
             print(
-                f"[GPU {dev}] epoch {ep:2d}/{n_epochs}: "
+                f"[GPU {dev} Beta-ActorCritic] epoch {ep:3d}/{n_epochs}: "
                 f"reward={np.mean(ep_rewards):.4f}  mean_beta={np.mean(ep_betas):.2f}"
             )
 
     w_lin = net.linear_proj.weight.detach().cpu().numpy().ravel().copy()
-    w1 = net.actor[0].weight.detach().cpu().numpy().T.copy()
-    b1 = net.actor[0].bias.detach().cpu().numpy().copy()
-    w2 = net.actor[2].weight.detach().cpu().numpy().T.copy()
-    b2 = net.actor[2].bias.detach().cpu().numpy().copy()
 
-    # Cross-entropy / evolutionary policy refinement in the exact event-driven simulator
-    # Enforce PPAI Lemma 2 structural sign constraints: load features have non-negative
-    # weights (higher load -> higher beta) and trust_gap has non-positive weight.
     def project_w(w_raw):
         w = np.asarray(w_raw, dtype=float).copy()
-        w[1] = np.clip(abs(w[1]), 0.45, 2.5)   # mean_load -> higher beta
-        w[2] = np.clip(abs(w[2]), 0.55, 2.5)   # load_dispersion -> higher beta
-        w[3] = np.clip(abs(w[3]), 0.45, 2.5)   # top1_load -> higher beta
-        w[4] = -np.clip(abs(w[4]), 0.35, 2.0)  # trust_gap -> lower beta
-        w[5] = np.clip(abs(w[5]), 0.20, 1.5)   # unavailability -> higher beta
+        w[0] = np.clip(w[0], -1.6, -0.4)
+        w[1] = np.clip(abs(w[1]), 0.55, 2.2)   # mean_load -> higher beta
+        w[2] = np.clip(abs(w[2]), 0.65, 2.4)   # load_dispersion -> higher beta
+        w[3] = np.clip(abs(w[3]), 0.55, 2.2)   # top1_load -> higher beta
+        w[4] = -np.clip(abs(w[4]), 0.45, 2.0)  # trust_gap -> lower beta
+        w[5] = np.clip(abs(w[5]), 0.25, 1.4)   # unavailability -> higher beta
         return w
 
     best_w = project_w(w_lin)
@@ -226,11 +222,11 @@ def train_beta_actor_critic_gpu(
 
     def eval_w(w_cand):
         tot = 0.0
-        for lam, seed in [(30.0, 101), (80.0, 102), (160.0, 103)]:
+        for lam, seed in [(30.0, 101), (80.0, 102), (140.0, 103), (160.0, 104)]:
             r = run(
                 Config(
                     n_peers=50,
-                    n_queries=600,
+                    n_queries=800,
                     arrival_rate=lam,
                     adversary_fraction=0.25,
                     adversary_type=peers.COLLUDE,
@@ -243,30 +239,29 @@ def train_beta_actor_critic_gpu(
                     beta_trainable=True,
                     beta_train=False,
                     beta_weights=w_cand.tolist(),
+                    audit_bandit=True,
+                    adaptive_audit=True,
                     seed=seed,
                 )
             )
             tot += r["accuracy"] - 0.55 * (r["latency_p95_ms"] / 1000.0) - 0.015 * r["probes_per_query"]
-        return tot / 3.0
+        return tot / 4.0
 
     best_score = eval_w(best_w)
-    prior_w = project_w(np.array([-1.10, 0.95, 1.15, 0.85, -0.90, 0.55, -0.25, 0.05], dtype=float))
+    prior_w = project_w(np.array([-1.05, 0.95, 1.15, 0.85, -0.95, 0.55, -0.25, 0.05], dtype=float))
     prior_score = eval_w(prior_w)
     if prior_score > best_score:
         best_w, best_score = prior_w.copy(), prior_score
 
-    for step in range(10):
-        cand = project_w(best_w + sim_rng.normal(0.0, 0.20, size=N_FEATURES))
+    for step in range(16):
+        cand = project_w(best_w + sim_rng.normal(0.0, 0.18, size=N_FEATURES))
         sc = eval_w(cand)
         if sc > best_score:
             best_w, best_score = cand, sc
+            print(f"  [CEM step {step+1:2d}] improved simulator utility -> {best_score:.4f}")
 
     weights = {
         "w_linear": [round(float(x), 4) for x in best_w],
-        "w1": w1.tolist(),
-        "b1": b1.tolist(),
-        "w2": w2.tolist(),
-        "b2": b2.tolist(),
     }
 
     elapsed = time.time() - t0
@@ -278,6 +273,82 @@ def train_beta_actor_critic_gpu(
         "weights": weights,
         "training_curve": history,
     }
+
+
+RL_PROFILES = [
+    # (tag, label, probe_cost, latency_cost)
+    ("rl_acc", "RL Escalation (Accuracy-Focused)", 0.004, 0.05),
+    ("rl_balanced", "RL Escalation (Balanced)", 0.018, 0.25),
+    ("rl_fast", "RL Escalation (Low-Latency)", 0.038, 0.45),
+]
+
+
+def _train_one_rl_profile(args):
+    tag, label, probe_cost, latency_cost, w_linear = args
+    Q = None
+    curve = []
+    # 18 episodes x 2500 queries across varying arrival loads & adversary fractions
+    for ep in range(18):
+        lam = [40.0, 80.0, 140.0][ep % 3]
+        adv_f = 0.20 if (ep % 2 == 0) else 0.30
+        eps = max(0.02, 0.18 * (0.90 ** ep))
+        lr = max(0.015, 0.06 * (0.94 ** ep))
+        r = run(
+            Config(
+                n_peers=50,
+                n_queries=2500,
+                arrival_rate=lam,
+                adversary_fraction=adv_f,
+                adversary_type=peers.COLLUDE,
+                policy="tada",
+                m_max=7,
+                use_traces=True,
+                use_confidence=True,
+                use_availability=True,
+                min_availability=0.45,
+                unreliable_fraction=0.35,
+                beta_trainable=True,
+                beta_train=False,
+                beta_weights=w_linear,
+                audit_bandit=True,
+                adaptive_audit=True,
+                escalation="rl",
+                rl_q=Q,
+                rl_train=True,
+                rl_epsilon=eps,
+                rl_lr=lr,
+                probe_cost=probe_cost,
+                latency_cost=latency_cost,
+                seed=1000 + 31 * ep,
+            )
+        )
+        Q = r["rl_q"]
+        if (ep + 1) % 6 == 0 or ep == 0:
+            curve.append(
+                {
+                    "episode": ep + 1,
+                    "accuracy": round(float(r["accuracy"]), 4),
+                    "probes": round(float(r["probes_per_query"]), 2),
+                    "p95_ms": round(float(r["latency_p95_ms"]), 1),
+                }
+            )
+    return tag, {"label": label, "probe_cost": probe_cost, "latency_cost": latency_cost, "Q": Q.tolist(), "curve": curve}
+
+
+def train_rl_escalation_suite(w_linear: list) -> dict:
+    """Train the 3 Counterfactual Per-Round Credit RL Escalation profiles in parallel."""
+    t0 = time.time()
+    jobs = [(tag, lbl, pc, lc, w_linear) for tag, lbl, pc, lc in RL_PROFILES]
+    with Pool(processes=len(jobs)) as pool:
+        outs = dict(pool.map(_train_one_rl_profile, jobs))
+    for tag, info in outs.items():
+        last = info["curve"][-1]
+        print(
+            f"[RL Escalation {tag:11s}] final ep: acc={100*last['accuracy']:.1f}%  "
+            f"probes={last['probes']:.2f}  p95={last['p95_ms']:.1f}ms"
+        )
+    outs["elapsed_sec"] = round(time.time() - t0, 2)
+    return outs
 
 
 def _eval_one(args):
@@ -294,15 +365,16 @@ def _eval_one(args):
     }
 
 
-def run_ablation_and_sweeps(weights: dict, seeds=(0, 1, 2, 3, 4)) -> dict:
-    """Evaluate all baselines and progressive TADA additions on real traces."""
+def run_ablation_and_sweeps(weights: dict, rl_suite: dict, seeds=tuple(range(8))) -> dict:
+    """Evaluate all baselines, progressive TADA additions, and RL escalation over 8 seeds."""
     base_env = dict(
         n_peers=50,
-        n_queries=1000,
+        n_queries=1200,
         use_traces=True,
         min_availability=0.45,
         unreliable_fraction=0.35,
     )
+    q_bal = rl_suite["rl_balanced"]["Q"]
 
     variants = [
         ("ppai", "PPAI (trust-blind)", dict(policy="ppai", beta=5.0)),
@@ -326,7 +398,7 @@ def run_ablation_and_sweeps(weights: dict, seeds=(0, 1, 2, 3, 4)) -> dict:
         ),
         (
             "tada_full",
-            "TADA + Conf + Avail + Trainable β (Ours)",
+            "TADA + Conf + Avail + Trainable β",
             dict(
                 policy="tada",
                 use_confidence=True,
@@ -334,6 +406,25 @@ def run_ablation_and_sweeps(weights: dict, seeds=(0, 1, 2, 3, 4)) -> dict:
                 beta_trainable=True,
                 beta_train=False,
                 beta_weights=weights["w_linear"],
+                audit_bandit=True,
+                adaptive_audit=True,
+            ),
+        ),
+        (
+            "tada_rl",
+            "TADA-RL (Full + Counterfactual RL + Audit Bandit)",
+            dict(
+                policy="tada",
+                use_confidence=True,
+                use_availability=True,
+                beta_trainable=True,
+                beta_train=False,
+                beta_weights=weights["w_linear"],
+                audit_bandit=True,
+                adaptive_audit=True,
+                escalation="rl",
+                rl_q=q_bal,
+                rl_train=False,
             ),
         ),
     ]
@@ -374,7 +465,7 @@ def run_ablation_and_sweeps(weights: dict, seeds=(0, 1, 2, 3, 4)) -> dict:
                     )
                 )
 
-    # 3. Arrival load sweep (25 .. 175 q/s) at 20% colluders
+    # 3. Arrival load sweep (25 .. 160 q/s) at 20% colluders
     for key, _, kw in variants:
         if key == "ppai":
             continue
@@ -394,7 +485,31 @@ def run_ablation_and_sweeps(weights: dict, seeds=(0, 1, 2, 3, 4)) -> dict:
                     )
                 )
 
-    with Pool(processes=min(16, os.cpu_count() or 4)) as pool:
+    # 4. RL Escalation vs Fixed Thresholds tau in {0.70, 0.80, 0.90, 0.95} at lambda=120, 25% colluders
+    rl_base = dict(
+        base_env,
+        arrival_rate=120.0,
+        adversary_type=peers.COLLUDE,
+        adversary_fraction=0.25,
+        policy="tada",
+        m_max=7,
+        use_confidence=True,
+        use_availability=True,
+        beta_trainable=True,
+        beta_train=False,
+        beta_weights=weights["w_linear"],
+        audit_bandit=True,
+        adaptive_audit=True,
+    )
+    for tau in [0.70, 0.80, 0.90, 0.95]:
+        for s in seeds:
+            jobs.append((f"pareto|tau_{tau:.2f}", dict(rl_base, escalation="threshold", tau=tau, seed=s)))
+    for tag, _, _, _ in RL_PROFILES:
+        q_tab = rl_suite[tag]["Q"]
+        for s in seeds:
+            jobs.append((f"pareto|{tag}", dict(rl_base, escalation="rl", rl_q=q_tab, rl_train=False, seed=s)))
+
+    with Pool(processes=min(24, os.cpu_count() or 8)) as pool:
         raw_out = pool.map(_eval_one, jobs)
 
     grouped: dict[str, list[dict]] = {}
@@ -421,7 +536,7 @@ def plot_results(data: dict):
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     s = data["evaluation"]["summary"]
 
-    fig, axes = plt.subplots(1, 3, figsize=(13.5, 3.8), dpi=200)
+    fig, axes = plt.subplots(1, 4, figsize=(17.0, 3.9), dpi=200)
     palette = {
         "ppai": ("#CC0000", "PPAI (trust-blind)", "--"),
         "majority": ("#6FA8DC", "Majority Vote", ":"),
@@ -429,7 +544,8 @@ def plot_results(data: dict):
         "eigentrust": ("#6AA84F", "EigenTrust", "--"),
         "tada_base": ("#F6B26B", "TADA (Trust only)", "-"),
         "tada_conf_avail": ("#E69138", "TADA + Conf + Avail", "-"),
-        "tada_full": ("#B45F06", "TADA + Conf + Avail + Trainable β", "-"),
+        "tada_full": ("#B45F06", "TADA + Trainable β", "-"),
+        "tada_rl": ("#1155CC", "TADA-RL (Full + RL + Bandit)", "-"),
     }
 
     # Panel (a): Collusion robustness on real traces + flaky peers
@@ -437,10 +553,10 @@ def plot_results(data: dict):
     fracs = [0.0, 0.1, 0.2, 0.3, 0.4]
     for k, (col, lbl, ls) in palette.items():
         ys = [s[f"collude|{k}|{f:.1f}"]["accuracy"] for f in fracs]
-        lw = 2.6 if k == "tada_full" else 1.7
+        lw = 2.6 if k in ("tada_full", "tada_rl") else 1.6
         ax.plot([int(f * 100) for f in fracs], ys, label=lbl, color=col, linestyle=ls, marker="o", linewidth=lw)
     ax.set_xlabel("Colluding Peers (%)")
-    ax.set_ylabel("Accuracy (Real LLM Traces)")
+    ax.set_ylabel("Accuracy (102k Real LLM Traces)")
     ax.set_title("(a) Collusion + Flaky Peers (λ=80 q/s)")
     ax.set_ylim(0.0, 0.85)
     ax.grid(alpha=0.25)
@@ -448,19 +564,19 @@ def plot_results(data: dict):
     # Panel (b): Tail latency across arrival rates
     ax = axes[1]
     lams = [25, 50, 80, 120, 160]
-    for k in ["majority", "dawid_skene", "eigentrust", "tada_base", "tada_conf_avail", "tada_full"]:
+    for k in ["majority", "dawid_skene", "eigentrust", "tada_base", "tada_conf_avail", "tada_full", "tada_rl"]:
         col, lbl, ls = palette[k]
         ys = [s[f"load|{k}|{lam}"]["latency_p95_ms"] for lam in lams]
-        lw = 2.6 if k == "tada_full" else 1.7
+        lw = 2.6 if k in ("tada_full", "tada_rl") else 1.6
         ax.plot(lams, ys, label=lbl, color=col, linestyle=ls, marker="s", linewidth=lw)
     ax.set_xlabel("Arrival Rate λ (queries/s)")
     ax.set_ylabel("p95 Latency (ms)")
-    ax.set_title("(b) Tail Latency vs. Load (35% Unreliable Peers)")
+    ax.set_title("(b) Tail Latency vs. Load (35% Flaky Peers)")
     ax.grid(alpha=0.25)
 
     # Panel (c): Adaptive beta(s) learned across load regimes
     ax = axes[2]
-    betas_learned = [s[f"load|tada_full|{lam}"]["mean_beta"] for lam in lams]
+    betas_learned = [s[f"load|tada_rl|{lam}"]["mean_beta"] for lam in lams]
     betas_fixed = [s[f"load|tada_base|{lam}"]["mean_beta"] for lam in lams]
     ax.plot(lams, betas_fixed, "--", color="#888888", marker="o", linewidth=1.8, label="Fixed β = 5.0")
     ax.plot(lams, betas_learned, "-", color="#B45F06", marker="D", linewidth=2.6, label="Learned β_θ(s)")
@@ -470,8 +586,29 @@ def plot_results(data: dict):
     ax.grid(alpha=0.25)
     ax.legend(loc="best", fontsize=8)
 
+    # Panel (d): RL Escalation vs Fixed Threshold tau (Accuracy vs Latency p95)
+    ax = axes[3]
+    taus = [0.70, 0.80, 0.90, 0.95]
+    tau_x = [s[f"pareto|tau_{t:.2f}"]["latency_p95_ms"] for t in taus]
+    tau_y = [100 * s[f"pareto|tau_{t:.2f}"]["accuracy"] for t in taus]
+    ax.plot(tau_x, tau_y, "--o", color="#E69138", linewidth=2.0, label="Fixed threshold τ (0.70..0.95)")
+    for t, x, y in zip(taus, tau_x, tau_y):
+        ax.annotate(f"τ={t:.2f}", (x, y), textcoords="offset points", xytext=(4, -8), fontsize=7.5)
+
+    rl_tags = [("rl_fast", "RL-Fast"), ("rl_balanced", "RL-Balanced"), ("rl_acc", "RL-Acc")]
+    rl_x = [s[f"pareto|{t}"]["latency_p95_ms"] for t, _ in rl_tags]
+    rl_y = [100 * s[f"pareto|{t}"]["accuracy"] for t, _ in rl_tags]
+    ax.plot(rl_x, rl_y, "-D", color="#1155CC", linewidth=2.5, label="Counterfactual RL (Ours)")
+    for (_, name), x, y in zip(rl_tags, rl_x, rl_y):
+        ax.annotate(name, (x, y), textcoords="offset points", xytext=(4, 5), fontsize=7.5, color="#1155CC", weight="bold")
+    ax.set_xlabel("p95 Latency (ms) [lower is better]")
+    ax.set_ylabel("Accuracy (%) [higher is better]")
+    ax.set_title("(d) RL Escalation vs. Fixed τ (λ=120 q/s)")
+    ax.grid(alpha=0.25)
+    ax.legend(loc="lower right", fontsize=7.5)
+
     handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", ncol=4, fontsize=8.5, frameon=False, bbox_to_anchor=(0.5, 1.04))
+    fig.legend(handles, labels, loc="upper center", ncol=4, fontsize=8.5, frameon=False, bbox_to_anchor=(0.5, 1.05))
     fig.tight_layout(rect=[0, 0, 1, 0.90])
     fig.savefig(FIG_DIR / "trust_conf_avail_beta.pdf", bbox_inches="tight")
     fig.savefig(FIG_DIR / "trust_conf_avail_beta.png", bbox_inches="tight")
@@ -484,11 +621,11 @@ def write_markdown_report(data: dict):
     w_lin = tr["weights"]["w_linear"]
 
     lines = [
-        "# Trust-Aware + Agent Confidence + Availability + Trainable β Results",
+        "# Trust-Aware + Agent Confidence + Availability + Trainable β + RL Optimization Results",
         "",
-        f"- **GPU Training Hardware:** `{tr['gpu_name']}` (`{tr['device']}`, `{tr['elapsed_sec']}s`)",
+        f"- **GPU Training Hardware:** `{tr['gpu_name']}` (`{tr['device']}`, `{tr['elapsed_sec']}s` Beta Actor-Critic + `{data['rl_training']['elapsed_sec']}s` RL Escalation Suite)",
         "- **Real LLM Trace Bank:** `102,025` traces across all 5 PPAI agents (`A1_qwen`, `A2_deepseek`, `A3_nemotron`, `A4_huatuo`, `A5_llama`; `20,405` common questions across all 5 benchmarks)",
-        "- **Network Environment:** `50` peers, `35%` flaky edge nodes (`availability ∈ [0.45, 0.85]`, `80 ms` dropout/retry penalty), `5` random seeds per point.",
+        "- **Network Environment:** `50` peers, `35%` flaky edge nodes (`availability ∈ [0.45, 0.85]`, `80 ms` dropout/retry penalty), `8` random seeds per evaluation point (`1,200` queries/run).",
         "",
         "## 1. Progressive Ablation Study (`λ = 80 q/s`, `25%` Colluders, `35%` Flaky Peers)",
         "",
@@ -516,7 +653,7 @@ def write_markdown_report(data: dict):
 
     lines += [
         "",
-        "## 3. Tail Latency (`p95 ms`) & Adaptive `β_θ(s)` Across Arrival Rates (`20%` Colluders)",
+        "## 3. Tail Latency (`p95 ms`) Across Arrival Rates (`20%` Colluders, `35%` Flaky Peers)",
         "",
         "| Method | λ=25 q/s | λ=50 q/s | λ=80 q/s | λ=120 q/s | λ=160 q/s |",
         "|---|---:|---:|---:|---:|---:|",
@@ -529,7 +666,27 @@ def write_markdown_report(data: dict):
 
     lines += [
         "",
-        "## 4. Learned Contextual `β_θ(s)` Feature Weights",
+        "## 4. Counterfactual Per-Round Credit RL Escalation vs. Fixed Threshold `τ` (`λ = 120 q/s`, `25%` Colluders)",
+        "",
+        "| Escalation Policy | Accuracy | Steady-State Acc | p95 Latency (ms) | Probes / Query |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for tau in [0.70, 0.80, 0.90, 0.95]:
+        r = s[f"pareto|tau_{tau:.2f}"]
+        lines.append(
+            f"| Fixed Threshold `τ = {tau:.2f}` | {100*r['accuracy']:.1f}% | "
+            f"{100*r['accuracy_steady']:.1f}% | {r['latency_p95_ms']:.1f} ms | {r['probes_per_query']:.2f} |"
+        )
+    for tag, label, _, _ in RL_PROFILES:
+        r = s[f"pareto|{tag}"]
+        lines.append(
+            f"| **{label}** | **{100*r['accuracy']:.1f}%** | "
+            f"**{100*r['accuracy_steady']:.1f}%** | **{r['latency_p95_ms']:.1f} ms** | **{r['probes_per_query']:.2f}** |"
+        )
+
+    lines += [
+        "",
+        "## 5. Learned Contextual `β_θ(s)` Feature Weights",
         "",
         "| Feature `ϕ_i(s)` | Learned Weight `θ_i` | Interpretation |",
         "|---|---:|---|",
@@ -556,13 +713,19 @@ def main():
     print(f"Loaded TraceBank: ready={bank.ready}, coverage={bank.coverage()}")
 
     gpu_info = train_beta_actor_critic_gpu(bank)
+    rl_suite = train_rl_escalation_suite(gpu_info["weights"]["w_linear"])
+
     (RESULTS_DIR / "trainable_beta_weights.json").write_text(
         json.dumps(gpu_info["weights"], indent=2) + "\n"
     )
+    (RESULTS_DIR / "rl_escalation_q.json").write_text(
+        json.dumps(rl_suite, indent=2) + "\n"
+    )
 
-    eval_out = run_ablation_and_sweeps(gpu_info["weights"])
+    eval_out = run_ablation_and_sweeps(gpu_info["weights"], rl_suite)
     full_data = {
         "gpu_training": gpu_info,
+        "rl_training": rl_suite,
         "evaluation": eval_out,
     }
     (RESULTS_DIR / "trust_conf_avail_beta.json").write_text(
@@ -570,7 +733,7 @@ def main():
     )
     plot_results(full_data)
     write_markdown_report(full_data)
-    print("Saved results/trust_conf_avail_beta.{json,md} and figures/trust_conf_avail_beta.{pdf,png}")
+    print("Saved results/trust_conf_avail_beta.{json,md}, results/rl_escalation_q.json, and figures/trust_conf_avail_beta.{pdf,png}")
 
 
 if __name__ == "__main__":

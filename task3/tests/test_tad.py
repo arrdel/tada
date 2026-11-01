@@ -88,3 +88,12 @@ def test_trainable_beta_adapts_and_exports_weights():
     assert "beta_weights" in r and len(r["beta_weights"]["w_linear"]) == 8
     assert 0.2 <= r["mean_beta"] <= 12.0
 
+
+def test_counterfactual_rl_escalation_and_audit_bandit():
+    r = run(Config(policy="tada", adversary_type=peers.COLLUDE, adversary_fraction=0.25,
+                   escalation="rl", rl_train=True, audit_bandit=True, adaptive_audit=True,
+                   use_confidence=True, use_availability=True, **FAST))
+    assert r["rl_q"] is not None and r["rl_q"].shape[-1] == 2
+    assert r["accuracy"] > 0.60
+
+

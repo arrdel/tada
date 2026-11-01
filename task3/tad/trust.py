@@ -166,6 +166,7 @@ class AuditedBeta(BetaAgreement):
         super().__init__(n_peers, n_clusters)
         self.ga = np.ones((n_peers, n_clusters))
         self.gb = np.ones((n_peers, n_clusters))
+        self.disagree_ema = np.zeros((n_peers, n_clusters))
         self.z, self.delta = z, delta
 
     def _audit_ucb(self, ga, gb):
@@ -199,6 +200,23 @@ class AuditedBeta(BetaAgreement):
         ga, gb = self.ga[:, k], self.gb[:, k]
         return ga * gb / ((ga + gb) ** 2 * (ga + gb + 1))
 
+    def record_disagreement(self, pid: int, k: int, disagreed: bool, alpha: float = 0.2):
+        self.disagree_ema[pid, k] = (
+            (1.0 - alpha) * self.disagree_ema[pid, k] + alpha * float(disagreed)
+        )
+
+    def audit_voi(self, k: int, shortlist: np.ndarray, used: list[int]) -> np.ndarray:
+        """Expected Value of Information (VOI) for auditing each shortlisted peer."""
+        std = np.sqrt(self.var_vec(k)[shortlist])
+        in_comm = np.isin(shortlist, used).astype(float)
+        dis = self.disagree_ema[shortlist, k]
+        return std * (1.0 + 0.85 * in_comm + 0.65 * dis)
+
+    def audit_uncertainty(self, used: list[int], k: int) -> float:
+        if not used:
+            return 0.25
+        return float(np.mean(np.sqrt(self.var_vec(k)[list(used)])))
+
     def aggregate(self, k, pids, labels, rng, confidences=None, conf_weight: float = 0.0):
         idx = list(pids)
         accs = self.acc_vec(k)[idx].astype(float)
@@ -227,6 +245,7 @@ class AuditedBeta(BetaAgreement):
         super().reset(pid)
         self.ga[pid] = 1.0
         self.gb[pid] = 1.0
+        self.disagree_ema[pid] = 0.0
 
     def reputation(self, pid):
         return float(np.mean([self.acc_vec(k)[pid] for k in range(self.K)]))

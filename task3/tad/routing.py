@@ -102,15 +102,27 @@ class TADA(Policy):
         if cfg.escalation == "rl":
             shape = (len(self.CONF_BINS) + 1, self.MAX_ROUNDS,
                      len(self.LOAD_BINS) + 1, provider.K, 2)
-            self.Q = (np.array(cfg.rl_q, dtype=float).copy() if cfg.rl_q is not None
-                      else np.zeros(shape))
+            if cfg.rl_q is not None:
+                self.Q = np.array(cfg.rl_q, dtype=float).copy()
+            else:
+                self.Q = np.zeros(shape)
+                # Calibrated Bayes-prior warm start: stopping value ~ posterior conf,
+                # escalating value ~ expected accuracy minus marginal probe/latency cost
+                mids = np.array([0.40, 0.60, 0.75, 0.85, 0.925, 0.975])
+                for cb, m_val in enumerate(mids):
+                    self.Q[cb, ..., 0] = m_val
+                    self.Q[cb, ..., 1] = (
+                        min(0.96, m_val + 0.14 * (1.0 - m_val))
+                        - cfg.probe_cost * cfg.round_size
+                        - cfg.latency_cost * 0.06
+                    )
         self.beta_ctrl = None
         if getattr(cfg, "beta_trainable", False):
             self.beta_ctrl = TrainableBetaController(
-                beta_min=getattr(cfg, "beta_min", 0.2),
-                beta_max=getattr(cfg, "beta_max", 12.0),
+                beta_min=getattr(cfg, "beta_min", 1.5),
+                beta_max=getattr(cfg, "beta_max", 10.0),
                 init_beta=cfg.beta,
-                lr=getattr(cfg, "beta_lr", 0.04),
+                lr=getattr(cfg, "beta_lr", 0.02),
                 train=getattr(cfg, "beta_train", False),
                 weights=getattr(cfg, "beta_weights", None),
             )
@@ -119,7 +131,7 @@ class TADA(Policy):
         return (int(np.searchsorted(self.CONF_BINS, conf)), min(rnd, self.MAX_ROUNDS - 1),
                 int(np.searchsorted(self.LOAD_BINS, load)), k)
 
-    def _escalate(self, conf, rnd, load, k, sim, traj):
+    def _escalate(self, conf, rnd, load, k, sim, traj, ans_r=0, probes_r=3, elapsed_r=0.0):
         if self.Q is None:
             return conf < self.cfg.tau
         s = self._state(conf, rnd, load, k)
@@ -127,7 +139,7 @@ class TADA(Policy):
             a = int(sim.rng.integers(2))
         else:
             a = int(np.argmax(self.Q[s]))
-        traj.append((s, a))
+        traj.append((s, a, int(ans_r), int(probes_r), float(elapsed_r)))
         return a == 1
 
     def on_finish(self, out, correct, latency):
@@ -137,8 +149,28 @@ class TADA(Policy):
             self.beta_ctrl.update(getattr(out, "beta_step", None), g)
         if self.Q is None or not self.cfg.rl_train:
             return
-        for s, a in out.traj:
-            self.Q[s + (a,)] += self.cfg.rl_lr * (g - self.Q[s + (a,)])
+        # Counterfactual per-round marginal credit assignment:
+        # At round r, stopping (a=0) has 0 marginal probe/latency cost and achieves
+        # accuracy 1[ans_r == CORRECT]. Escalating (a=1) pays only the marginal
+        # additional probes & latency after round r to achieve terminal accuracy.
+        total_ans_probes = max(len(out.answerers), 1)
+        for step in out.traj:
+            if len(step) == 2:
+                s, a = step
+                self.Q[s + (a,)] += self.cfg.rl_lr * (g - self.Q[s + (a,)])
+            else:
+                s, a, ans_r, probes_r, elapsed_r = step
+                r_stop = float(ans_r == CORRECT)
+                self.Q[s + (0,)] += self.cfg.rl_lr * (r_stop - self.Q[s + (0,)])
+                if a == 1:
+                    delta_probes = max(1, total_ans_probes - probes_r)
+                    delta_lat = max(0.0, float(latency) - elapsed_r)
+                    r_esc = (
+                        float(correct)
+                        - self.cfg.probe_cost * delta_probes
+                        - self.cfg.latency_cost * delta_lat
+                    )
+                    self.Q[s + (1,)] += self.cfg.rl_lr * (r_esc - self.Q[s + (1,)])
 
     def process(self, q, sim):
         cfg, prov, k = self.cfg, self.provider, q.k
@@ -198,9 +230,13 @@ class TADA(Policy):
                 confidences=confs if use_conf else None,
                 conf_weight=cw,
             )
+            elapsed_r = float(sim.now - q.t)
             if len(used) >= cfg.m_max or pos >= len(order):
                 break
-            if not self._escalate(conf, rnd, load_now, k, sim, traj):
+            if not self._escalate(
+                conf, rnd, load_now, k, sim, traj,
+                ans_r=answer, probes_r=len(used), elapsed_r=elapsed_r,
+            ):
                 break
             rnd += 1
 
@@ -213,10 +249,19 @@ class TADA(Policy):
             if learn:
                 for pid, lab in zip(used, labels):
                     prov.update(pid, k, lab == answer, w=v_conf)
+                    if hasattr(prov, "record_disagreement"):
+                        prov.record_disagreement(pid, k, lab != answer)
 
         audits = 0
-        if sim.rng.random() < cfg.p_audit:
-            if sim.rng.random() < 0.5:
+        p_aud = float(cfg.p_audit)
+        if getattr(cfg, "adaptive_audit", False) and p_aud > 0.0:
+            unc = prov.audit_uncertainty(used, k) if hasattr(prov, "audit_uncertainty") else 0.15
+            p_aud = float(np.clip(p_aud * (0.55 + 1.2 * (1.0 - conf) + 1.8 * unc), 0.04, 0.40))
+        if sim.rng.random() < p_aud:
+            if getattr(cfg, "audit_bandit", False) and hasattr(prov, "audit_voi"):
+                voi = prov.audit_voi(k, shortlist, used)
+                target = int(shortlist[np.argmax(voi + 1e-9 * sim.rng.random(len(voi)))])
+            elif sim.rng.random() < 0.5:
                 target = int(sim.rng.choice(used))
             else:
                 var = prov.var_vec(k)[shortlist]
