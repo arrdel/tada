@@ -77,6 +77,8 @@ class Config:
     beta_lr: float = 0.02
     audit_bandit: bool = False
     adaptive_audit: bool = False
+    online_self_supervised: bool = False
+    bootstrap_audits: int = 0
     seed: int = 0
 
 
@@ -103,6 +105,12 @@ class Sim:
             min_availability=cfg.min_availability,
             unreliable_fraction=cfg.unreliable_fraction)
         self.policy = make_policy(cfg, self.fleet)
+        if cfg.bootstrap_audits > 0 and hasattr(self.policy.provider, "audit"):
+            for pid in range(cfg.n_peers):
+                for _ in range(cfg.bootstrap_audits):
+                    k_b = int(self.rng.integers(profiles.N_CLUSTERS))
+                    ans_b = self.fleet.answer(pid, k_b, self.canary_qid())
+                    self.policy.provider.audit(pid, k_b, ans_b == peers_mod.CORRECT)
         n = cfg.n_peers
         self.queues = [deque() for _ in range(n)]
         self.busy = np.zeros(n, dtype=bool)
