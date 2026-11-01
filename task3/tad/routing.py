@@ -143,7 +143,14 @@ class TADA(Policy):
         return a == 1
 
     def on_finish(self, out, correct, latency):
-        g = (float(correct) - self.cfg.probe_cost * out.probes
+        # In live self-supervised online mode (`online_self_supervised=True`),
+        # use the audit-anchored confidence `v_conf` instead of oracle `correct`.
+        reward_acc = (
+            float(getattr(out, "v_conf", correct))
+            if getattr(self.cfg, "online_self_supervised", False)
+            else float(correct)
+        )
+        g = (reward_acc - self.cfg.probe_cost * out.probes
              - self.cfg.latency_cost * latency)
         if self.beta_ctrl is not None and self.beta_ctrl.train:
             self.beta_ctrl.update(getattr(out, "beta_step", None), g)
@@ -273,4 +280,5 @@ class TADA(Policy):
         out = Outcome(answer, len(used) + audits, audits, used, beta_used=beta_val)
         out.traj = traj
         out.beta_step = beta_step
+        out.v_conf = float(v_conf) if len(used) >= 2 else float(conf)
         return out

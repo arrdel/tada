@@ -21,6 +21,7 @@ from . import profiles
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TRACES = ROOT / "data" / "traces"
+COMPACT_NPZ = ROOT / "data" / "traces_compact.npz"
 
 _EXPLICIT_ANS_RE = re.compile(
     r"(?:answer|choice|option)\s*(?:is|:)\s*\(?[A-Da-d]\b|####\s*-?[\d,]+",
@@ -59,6 +60,12 @@ class TraceBank:
         self._load()
 
     def _load(self):
+        # Fast path: if root is DEFAULT_TRACES and no JSONL files exist (e.g. fresh git clone)
+        # or traces_compact.npz exists and is complete, load from traces_compact.npz.
+        has_jsonl = self.root.exists() and any(self.root.glob("*/*.jsonl"))
+        if not has_jsonl and COMPACT_NPZ.exists():
+            self._load_compact(COMPACT_NPZ)
+            return
         if not self.root.exists():
             return
         seen_sets: list[list[set[str]]] = [[] for _ in profiles.CLUSTERS]
@@ -112,6 +119,48 @@ class TraceBank:
             if seen_sets[k]:
                 common = set.intersection(*seen_sets[k])
                 self.common_qids[k] = [q for q in self.qids[k] if q in common]
+
+    def save_compact(self, path: Path | str = COMPACT_NPZ):
+        """Export all (choice, correct, confidence) tables to a compressed .npz file
+        (~250 KB) so collaborators can run `use_traces=True` after `git pull`."""
+        arrays = {}
+        agents = list(profiles.AGENT_TYPES)
+        for k in range(profiles.N_CLUSTERS):
+            qlist = self.question_ids(k)
+            arrays[f"qids_{k}"] = np.array(qlist, dtype="U24")
+            ch_mat = np.ones((len(agents), len(qlist)), dtype=np.int8)
+            cf_mat = np.full((len(agents), len(qlist)), 70, dtype=np.uint8)
+            for i, ag in enumerate(agents):
+                ch_d = self.choices.get(ag, [{}] * profiles.N_CLUSTERS)[k]
+                cf_d = self.confidences.get(ag, [{}] * profiles.N_CLUSTERS)[k]
+                for j, qid in enumerate(qlist):
+                    if qid in ch_d:
+                        ch_mat[i, j] = int(ch_d[qid])
+                        cf_mat[i, j] = int(round(100.0 * float(cf_d.get(qid, 0.7))))
+            arrays[f"choices_{k}"] = ch_mat
+            arrays[f"confs_{k}"] = cf_mat
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(path, **arrays)
+
+    def _load_compact(self, path: Path | str = COMPACT_NPZ):
+        z = np.load(path, allow_pickle=False)
+        agents = list(profiles.AGENT_TYPES)
+        for ag in agents:
+            self.choices[ag] = [{} for _ in profiles.CLUSTERS]
+            self.corrects[ag] = [{} for _ in profiles.CLUSTERS]
+            self.confidences[ag] = [{} for _ in profiles.CLUSTERS]
+        for k in range(profiles.N_CLUSTERS):
+            qlist = [str(x) for x in z[f"qids_{k}"].tolist()]
+            ch_mat = z[f"choices_{k}"]
+            cf_mat = z[f"confs_{k}"]
+            self.qids[k] = qlist
+            self.common_qids[k] = list(qlist)
+            for i, ag in enumerate(agents):
+                ch_row = ch_mat[i].tolist()
+                cf_row = (cf_mat[i].astype(float) / 100.0).tolist()
+                self.choices[ag][k] = dict(zip(qlist, ch_row))
+                self.corrects[ag][k] = {q: (c == 0) for q, c in zip(qlist, ch_row)}
+                self.confidences[ag][k] = dict(zip(qlist, cf_row))
 
     @property
     def ready(self) -> bool:
