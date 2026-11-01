@@ -75,6 +75,8 @@ class Config:
     beta_min: float = 1.5
     beta_max: float = 10.0
     beta_lr: float = 0.02
+    audit_bandit: bool = False
+    adaptive_audit: bool = False
     seed: int = 0
 
 
