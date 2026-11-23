@@ -19,7 +19,7 @@ todo.md
 # Python
 __pycache__/
 *.pyc
-
+.pytest_cache/
 
 # OS / editor
 .DS_Store
@@ -28,12 +28,16 @@ __pycache__/
 # Copyrighted paper (keep local copies only)
 21-PPAI_*.pdf
 
-# Deck and progress report stay local (not on the remote)
+# Presentations, reports, and submission artifacts stay local (not on the remote)
 presentation/
 report/
+submission/
+submissions/
+Group*.pdf
+*.zip
 
 # Real-answer traces are large; keep a tiny smoke sample if committed explicitly
-task3/data/traces/**/*.jsonl
-!task3/data/traces/.gitkeep
-task3/data/questions/**/*.jsonl
-!task3/data/questions/.gitkeep
+data/traces/**/*.jsonl
+!data/traces/.gitkeep
+data/questions/**/*.jsonl
+!data/questions/.gitkeep

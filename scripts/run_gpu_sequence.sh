@@ -63,7 +63,7 @@ run_stage "trace_bank_status" \
 run_stage "train_beta_confidence_availability" \
   "$PY" -m experiments.train_beta_confidence
 
-# Stage 3: Full Task III experiment suite (robustness, cost, load, RL escalation, ablations)
+# Stage 3: Full TADA-RL experiment suite (robustness, cost, load, RL escalation, ablations)
 run_stage "run_all_experiments" \
   "$PY" -m experiments.run_all
 

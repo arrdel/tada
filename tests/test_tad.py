@@ -1,6 +1,6 @@
 """Sanity tests for the simulator, the baselines, and TADA.
 
-    cd task3 && python -m pytest -q
+    python -m pytest -q
 """
 import os
 import sys

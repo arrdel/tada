@@ -1,4 +1,4 @@
-# Task III — Complete 5-Agent Real LLM Trace Collection & TADA Benchmark Results
+# TADA-RL — Complete 5-Agent Real LLM Trace Collection & Benchmark Results
 
 **Total per-question LLM traces collected:** `102,025` (**100% coverage** of all `20,405` benchmark items across **all 5 PPAI 7–8B edge models**: `A1_qwen`, `A2_deepseek`, `A3_nemotron`, `A4_huatuo`, and `A5_llama` on `MMLU`, `GSM8K`, `MedQA`, `ARC-C`, and `AGIEval`; `ready for full sim: True`).
 

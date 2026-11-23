@@ -1,6 +1,5 @@
-"""Run every Task III experiment and write results + figures.
+"""Run the full TADA-RL baseline & ablation experiment suite and write results + figures.
 
-    cd task3
     python -m experiments.run_all            # 5 seeds, ~1 min on 32 cores
     python -m experiments.run_all --seeds 2  # quicker
 
